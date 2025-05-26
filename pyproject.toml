@@ -6,6 +6,13 @@ authors = ["Your Name <your.email@example.com>"]
 readme = "README.md"
 packages = [{include = "textcase", from = "src"}]
 license = "MIT"
+include = ["textcase/py.typed"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+click = "^8.1.7"
+pyyaml = "^6.0.1"
+uuid = "^1.30"
 
 [tool.poetry.scripts]
 tse = "textcase.cli:main"

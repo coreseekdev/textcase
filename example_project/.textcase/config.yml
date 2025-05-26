@@ -1,0 +1,9 @@
+settings:
+  default_tag:
+  - important
+  digits: 3
+  prefix: REQ
+  sep: ''
+tags:
+  documentation: Documentation related items
+  important: High priority items
