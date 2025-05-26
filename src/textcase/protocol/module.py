@@ -32,6 +32,8 @@ __all__ = [
     'Project',
     'ModuleOrder',
     'ModuleTags',
+    'CaseItem',
+    'DocumentCaseItem',
 ]
 
 class ModuleConfig(Protocol):
@@ -193,27 +195,122 @@ class ModuleOrder(Protocol):
         """Remove an item from the ordering."""
         ...
 
-class ModuleTags(Protocol):
-    """Protocol for module tagging functionality."""
+class CaseItem(Protocol):
+    """Protocol for a case item that can be tagged.
+    
+    A case item represents a document or test case that can be tagged
+    for organization and retrieval.
+    """
+    
+    @property
+    @abstractmethod
+    def prefix(self) -> str:
+        """Get the prefix of the case item.
+        
+        The prefix is used to group related case items together.
+        """
+        ...
+        
+    @property
+    @abstractmethod
+    def id(self) -> str:
+        """Get the unique identifier of the case item within its prefix.
+        
+        The ID must be unique within the same prefix and should be a valid filename.
+        """
+        ...
+        
+    @property
+    @abstractmethod
+    def key(self) -> str:
+        """Get the unique key for this case item.
+        
+        The key is used to uniquely identify the item in the tagging system.
+        It should be in the format 'prefix:id'.
+        """
+        ...
+
+
+class DocumentCaseItem(CaseItem, Protocol):
+    """Protocol for a document case item.
+    
+    This is a placeholder protocol that extends CaseItem for document-specific
+    functionality. Currently, it doesn't add any new methods or properties.
+    """
+    pass
+
+
+class ProjectTags(Protocol):
+    """Protocol for project tagging functionality.
+    
+    This protocol defines the interface for managing tags on case items within a project.
+    Tags can be used to organize and filter case items across the project.
+    """
     
     @abstractmethod
-    def get_tags(self) -> Dict[str, List[Path]]:
-        """Get all tags and their associated items."""
+    def get_tags(self, prefix: str) -> List[str]:
+        """Get all available tags for the specified prefix.
+        
+        Tags from parent modules are included in the result.
+        
+        Args:
+            prefix: The prefix to get tags for.
+                   
+        Returns:
+            A list of tag names that can be used with the specified prefix.
+        """
         ...
         
     @abstractmethod
-    def get_items_with_tag(self, tag: str) -> List[Path]:
-        """Get all items with the given tag."""
+    def get_items_with_tag(self, tag: str, prefix: str) -> List[DocumentCaseItem]:
+        """Get all case items with the given tag and prefix.
+        
+        Args:
+            tag: The tag to filter case items by.
+            prefix: The prefix to filter case items by.
+                   
+        Returns:
+            A list of DocumentCaseItem objects that have the specified tag and prefix.
+            The list may include items from parent modules if they match the tag.
+        """
         ...
         
     @abstractmethod
-    def add_tag(self, item: Path, tag: str) -> None:
-        """Add a tag to an item."""
+    def add_tag(self, item: DocumentCaseItem, tag: str) -> None:
+        """Add a tag to a case item.
+        
+        Args:
+            item: The case item to tag.
+            tag: The tag to add to the item.
+            
+        Raises:
+            ValueError: If the tag is invalid or the item cannot be tagged.
+        """
         ...
         
     @abstractmethod
-    def remove_tag(self, item: Path, tag: str) -> None:
-        """Remove a tag from an item."""
+    def remove_tag(self, item: DocumentCaseItem, tag: str) -> None:
+        """Remove a tag from a case item.
+        
+        Args:
+            item: The case item to untag.
+            tag: The tag to remove from the item.
+            
+        Raises:
+            ValueError: If the tag doesn't exist on the item.
+        """
+        ...
+        
+    @abstractmethod
+    def get_item_tags(self, item: DocumentCaseItem) -> List[str]:
+        """Get all tags for a specific case item.
+        
+        Args:
+            item: The case item to get tags for.
+            
+        Returns:
+            A list of tag names associated with the item.
+        """
         ...
 
 class Module(Protocol):
@@ -252,12 +349,6 @@ class Module(Protocol):
         """Get the module's ordering interface."""
         ...
         
-    @property
-    @abstractmethod
-    def tags(self) -> ModuleTags:
-        """Get the module's tagging interface."""
-        ...
-        
     @abstractmethod
     def save(self) -> None:
         """Save any changes to the module."""
@@ -267,9 +358,17 @@ class Module(Protocol):
 class Project(Module, Protocol):
     """Protocol for a project, which is the root module in the module hierarchy.
     
-    A Project is a Module with additional capabilities for managing submodules.
+    A Project is a Module with additional capabilities for managing submodules and tags.
     It inherits all methods from Module and adds project-specific methods.
     """
+    @property
+    @abstractmethod
+    def tags(self) -> ModuleTags:
+        """Get the project's global tagging interface.
+        
+        The tags are managed at the project level and are available to all modules.
+        """
+        ...
     
     @property
     @abstractmethod
