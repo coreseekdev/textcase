@@ -60,15 +60,37 @@ class YamlModuleConfig(ModuleConfig):
         
         Args:
             vfs: The virtual filesystem to use for saving.
+            
+        Raises:
+            OSError: If the configuration file cannot be written.
         """
         config_path = self.path / '.textcase.yml'
+        
+        # Ensure the parent directory exists
+        if not vfs.exists(self.path):
+            vfs.makedirs(self.path, exist_ok=True)
+            
         data = {
             'settings': self.settings,
             'tags': self.tags
         }
         
-        with vfs.open(config_path, 'w') as f:
-            yaml.safe_dump(data, f, default_flow_style=False)
+        # Use a temporary file for atomic write
+        temp_path = config_path.with_suffix('.tmp')
+        try:
+            with vfs.open(temp_path, 'w') as f:
+                yaml.safe_dump(data, f, default_flow_style=False)
+            
+            # Move temp file to target (atomic on POSIX systems)
+            if vfs.exists(config_path):
+                vfs.remove(config_path)
+            vfs.move(temp_path, config_path)
+            
+        except Exception as e:
+            # Clean up temp file if it exists
+            if vfs.exists(temp_path):
+                vfs.remove(temp_path)
+            raise
     
     def update_settings(self, settings: Dict[str, Any]) -> None:
         """Update module settings.

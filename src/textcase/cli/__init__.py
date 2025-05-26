@@ -19,7 +19,12 @@ import click
 from pathlib import Path
 from typing import Optional
 
-from ..core import LocalVFS, ProjectModule
+from pathlib import Path
+from typing import Optional
+
+import click
+
+from ..core import create_project, get_default_vfs
 
 # Import all command modules
 from .commands.create import create
@@ -37,28 +42,30 @@ def cli(ctx: click.Context, project_path: Optional[Path] = None):
     # Ensure that ctx.obj exists and is a dict
     ctx.ensure_object(dict)
     
-    # Initialize VFS and project
-    vfs = LocalVFS()
+    # Get project path
     project_path = project_path or Path.cwd()
     
     try:
-        # Try to load existing project
-        project = ProjectModule.load(project_path, vfs)
-    except FileNotFoundError:
-        # Or create a new one if it doesn't exist
-        project = ProjectModule.create(
-            path=project_path,
-            vfs=vfs,
-            settings={
+        # Create or load project
+        project = create_project(project_path)
+        vfs = get_default_vfs()
+        
+        # Initialize default settings if this is a new project
+        if not project_path.joinpath('.textcase.yml').exists():
+            project.config.settings.update({
                 'digits': 3,
                 'prefix': 'REQ',
                 'sep': '',
                 'default_tag': []
-            }
-        )
-    
-    ctx.obj['project'] = project
-    ctx.obj['vfs'] = vfs
+            })
+            project.save()
+            
+        ctx.obj['project'] = project
+        ctx.obj['vfs'] = vfs
+        
+    except Exception as e:
+        click.echo(f"Error initializing project: {e}", err=True)
+        ctx.exit(1)
     
     # If no command is provided, show help
     if ctx.invoked_subcommand is None:

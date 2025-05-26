@@ -23,6 +23,22 @@ from typing import Any, Iterator, Optional, Union
 
 from ..protocol import FileHandle, FileStat, VFS
 
+
+__all__ = ['get_default_local_vfs']
+
+_default_local_vfs = None
+
+def get_default_local_vfs() -> VFS:
+    """Get the default local filesystem VFS instance.
+    
+    Returns:
+        A shared LocalVFS instance.
+    """
+    global _default_local_vfs
+    if _default_local_vfs is None:
+        _default_local_vfs = LocalVFS()
+    return _default_local_vfs
+
 class LocalFileHandle(FileHandle):
     """Local filesystem file handle implementation."""
     
@@ -64,7 +80,7 @@ class LocalFileHandle(FileHandle):
             self._file.close()
             self._closed = True
     
-    def __enter__(self) -> LocalFileHandle:
+    def __enter__(self) -> FileHandle:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):

@@ -22,14 +22,14 @@ from pathlib import Path
 # Add the src directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from textcase.core import LocalVFS, ProjectModule
+from pathlib import Path
+
+from textcase.core import create_project, get_default_vfs
 
 def main():
-    # Initialize VFS
-    vfs = LocalVFS()
-    
     # Create or load project
     project_path = Path("example_project").resolve()
+    vfs = get_default_vfs()
     
     # Clean up from previous runs
     if vfs.exists(project_path):
@@ -37,20 +37,24 @@ def main():
         vfs.rmtree(project_path)
     
     print(f"\nCreating new project at {project_path}")
-    project = ProjectModule.create(
-        path=project_path,
-        vfs=vfs,
-        settings={
-            'digits': 3,
-            'prefix': 'REQ',
-            'sep': '',
-            'default_tag': ['important']
-        },
-        tags={
-            'important': 'High priority items',
-            'documentation': 'Documentation related items'
-        }
-    )
+    project = create_project(project_path)
+    
+    # Configure project settings
+    project.config.settings.update({
+        'digits': 3,
+        'prefix': 'REQ',
+        'sep': '',
+        'default_tag': ['important']
+    })
+    
+    # Configure project tags
+    project.config.tags.update({
+        'important': 'High priority items',
+        'documentation': 'Documentation related items'
+    })
+    
+    # Save the initial configuration
+    project.save()
     
     # Print project info
     print(f"\nProject path: {project.path}")

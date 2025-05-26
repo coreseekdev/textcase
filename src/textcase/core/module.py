@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Set, Type, TypeVar, cast
 
 from ..protocol.module import Module, ModuleConfig, ModuleOrder, ModuleTags
 from ..protocol.vfs import VFS
-from .config import YamlModuleConfig
+from .module_config import YamlModuleConfig
 from .order import YamlOrder
 from .tags import FileBasedTags
 
@@ -168,41 +168,5 @@ class BaseModule(Module):
         for module in self._submodules.values():
             module.save()
 
-class ProjectModule(BaseModule):
-    """Root module representing a project."""
-    
-    @classmethod
-    def create(
-        cls: Type[T],
-        path: Path,
-        vfs: VFS,
-        settings: Optional[Dict[str, Any]] = None,
-        tags: Optional[Dict[str, str]] = None
-    ) -> 'ProjectModule':
-        """Create a new project."""
-        # Create the project directory if it doesn't exist
-        if not vfs.exists(path):
-            vfs.makedirs(path, exist_ok=True)
-        
-        project = cls(path, vfs)
-        
-        # Initialize default settings
-        if settings:
-            project.config.settings.update(settings)
-        
-        # Initialize default tags
-        if tags:
-            project.config.tags.update(tags)
-        
-        # Save the initial configuration
-        project.save()
-        
-        return project
-    
-    @classmethod
-    def load(cls: Type[T], path: Path, vfs: VFS) -> 'ProjectModule':
-        """Load an existing project."""
-        if not vfs.exists(path):
-            raise FileNotFoundError(f"Project directory not found: {path}")
-            
-        return cls(path, vfs)
+class YamlModule(BaseModule):
+    pass  # 作为别名
