@@ -18,6 +18,7 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
+from .config import YamlModuleConfig
 from ..protocol import (
     VFS,
     FileHandle,
@@ -35,12 +36,13 @@ from .module import BaseModule, ProjectModule
 
 __all__ = [
     # Core implementations
+    'BaseModule',
     'LocalVFS',
     'LocalFileHandle',
+    'ProjectModule',
     'YamlOrder',
     'FileBasedTags',
-    'BaseModule',
-    'ProjectModule',
+    'YamlModuleConfig',
     
     # Re-exported from protocol for convenience
     'VFS',

@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Type, TypeVar, cast
 
 from ..protocol.module import Module, ModuleConfig, ModuleOrder, ModuleTags
-from ..protocol.vfs_protocol import VFS
+from ..protocol.vfs import VFS
+from .config import YamlModuleConfig
 from .order import YamlOrder
 from .tags import FileBasedTags
 
@@ -35,7 +36,7 @@ class BaseModule(Module):
         self._path = path
         self._vfs = vfs
         self._parent = parent
-        self._config: Optional[ModuleConfig] = None
+        self._config: Optional[YamlModuleConfig] = None
         self._order: Optional[ModuleOrder] = None
         self._tags: Optional[ModuleTags] = None
         self._submodules: Dict[str, 'BaseModule'] = {}
@@ -47,10 +48,10 @@ class BaseModule(Module):
         return self._path
     
     @property
-    def config(self) -> ModuleConfig:
+    def config(self) -> YamlModuleConfig:
         """Get the module's configuration."""
         if self._config is None:
-            self._config = ModuleConfig.load(self._path, self._vfs)
+            self._config = YamlModuleConfig.load(self._path, self._vfs)
         return self._config
     
     @property
@@ -72,7 +73,23 @@ class BaseModule(Module):
         if self._initialized:
             return
             
-        # Load submodules
+        try:
+            # Load configuration
+            self._config = YamlModuleConfig.load(self._path, self._vfs)
+            
+            # Initialize order and tags
+            self._order = YamlOrder(self._path, self._vfs)
+            self._tags = FileBasedTags(self._path, self._vfs)
+            
+            # Load submodules
+            self._load_submodules()
+            
+            self._initialized = True
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize module at {self._path}: {e}") from e
+    
+    def _load_submodules(self) -> None:
+        """Load submodules."""
         if self._vfs.isdir(self._path):
             for entry in self._vfs.listdir(self._path):
                 # Get the full path of the entry
@@ -80,8 +97,6 @@ class BaseModule(Module):
                 if self._vfs.isdir(entry_path):
                     module = self._create_submodule(entry.name, entry_path)
                     self._submodules[entry.name] = module
-        
-        self._initialized = True
     
     def _create_submodule(self, name: str, path: Optional[Path] = None) -> 'BaseModule':
         """Create a new submodule instance."""

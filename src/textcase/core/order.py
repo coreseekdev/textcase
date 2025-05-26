@@ -19,7 +19,7 @@ import yaml
 from pathlib import Path
 from typing import List, Optional
 
-from ..protocol.vfs_protocol import VFS
+from ..protocol.vfs import VFS
 
 class YamlOrder:
     """Order implementation using YAML files."""

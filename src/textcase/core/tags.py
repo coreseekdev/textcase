@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from ..protocol.vfs_protocol import VFS
+from ..protocol.vfs import VFS
 
 class FileBasedTags:
     """Tag implementation using individual tag files (similar to .gitignore)."""

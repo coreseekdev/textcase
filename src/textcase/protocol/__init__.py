@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 # VFS protocol
-from .vfs_protocol import VFS, FileHandle, FileStat, FileSeek
+from .vfs import VFS, FileHandle, FileStat, FileSeek
 
 # Module protocol
 from .module import (
@@ -30,7 +30,7 @@ from .module import (
 )
 
 # For backward compatibility
-from .vfs_protocol import VFS as VFSProtocol
+from .vfs import VFS as VFSProtocol
 
 __all__ = [
     # VFS related

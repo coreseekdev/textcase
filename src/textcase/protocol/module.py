@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Protocol, TypeVar, runtime_checkable
 import yaml
 
-from .vfs_protocol import VFS
+from .vfs import VFS
 
 __all__ = [
     'ModuleConfig',
@@ -32,43 +32,54 @@ __all__ = [
     'ModuleTags',
 ]
 
-@dataclass
-class ModuleConfig:
-    """Module configuration."""
+class ModuleConfig(Protocol):
+    """Protocol for module configuration."""
+    
     path: Path
-    settings: Dict[str, Any] = field(default_factory=dict)
-    tags: Dict[str, str] = field(default_factory=dict)
+    """The filesystem path of the module."""
+    
+    settings: Dict[str, Any]
+    """Module settings as key-value pairs."""
+    
+    tags: Dict[str, str]
+    """Module tags as key-description pairs."""
     
     @classmethod
-    def load(cls, path: Path, vfs: VFS) -> ModuleConfig:
-        """Load configuration from a YAML file."""
-        config_path = path / '.textcase' / 'config.yml'
-        if not vfs.exists(config_path):
-            return cls(path=path)
+    def load(cls, path: Path, vfs: VFS) -> 'ModuleConfig':
+        """Load configuration from storage.
+        
+        Args:
+            path: The path to the module directory.
+            vfs: The virtual filesystem to use for loading.
             
-        with vfs.open(config_path, 'r') as f:
-            data = yaml.safe_load(f) or {}
-            
-        return cls(
-            path=path,
-            settings=data.get('settings', {}),
-            tags=data.get('tags', {})
-        )
+        Returns:
+            A new ModuleConfig instance loaded from storage.
+        """
+        ...
     
     def save(self, vfs: VFS) -> None:
-        """Save configuration to a YAML file."""
-        config_dir = self.path / '.textcase'
-        if not vfs.exists(config_dir):
-            vfs.makedirs(config_dir, exist_ok=True)
-            
-        config_path = config_dir / 'config.yml'
-        data = {
-            'settings': self.settings,
-            'tags': self.tags
-        }
+        """Save configuration to storage.
         
-        with vfs.open(config_path, 'w') as f:
-            yaml.safe_dump(data, f, default_flow_style=False)
+        Args:
+            vfs: The virtual filesystem to use for saving.
+        """
+        ...
+        
+    def update_settings(self, settings: Dict[str, Any]) -> None:
+        """Update module settings.
+        
+        Args:
+            settings: Dictionary of settings to update.
+        """
+        ...
+        
+    def update_tags(self, tags: Dict[str, str]) -> None:
+        """Update module tags.
+        
+        Args:
+            tags: Dictionary of tags to update.
+        """
+        ...
 
 class ModuleOrder(Protocol):
     """Protocol for module ordering functionality."""
