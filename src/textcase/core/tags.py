@@ -16,74 +16,73 @@
 """Default implementation of ModuleTags."""
 
 import os
+import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 from ..protocol.vfs import VFS
 
 class FileBasedTags:
-    """Tag implementation using individual tag files (similar to .gitignore)."""
+    """Tag implementation using .textcase.yml for storing tags."""
     
     def __init__(self, path: Path, vfs: VFS):
         """Initialize with module path and VFS."""
         self.path = path
         self.vfs = vfs
-        self._tags_dir = path / '.textcase' / 'tags'
+        self._config_file = path / '.textcase.yml'
         self._cache: Optional[Dict[str, Set[Path]]] = None
     
-    def _ensure_tags_dir(self) -> None:
-        """Ensure the tags directory exists."""
-        if not self.vfs.exists(self._tags_dir):
-            self.vfs.makedirs(self._tags_dir, exist_ok=True)
-    
-    def _load_tag_file(self, tag: str) -> Set[Path]:
-        """Load a single tag file."""
-        tag_file = self._tags_dir / f"{tag}.tag"
-        if not self.vfs.exists(tag_file):
-            return set()
+    def _load_tags(self) -> Dict[str, Set[Path]]:
+        """Load all tags from the config file."""
+        if not self.vfs.exists(self._config_file):
+            return {}
             
-        items = set()
-        with self.vfs.open(tag_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    items.add(Path(line))
-        return items
+        with self.vfs.open(self._config_file, 'r') as f:
+            config = yaml.safe_load(f) or {}
+            
+        tags = config.get('tags', {})
+        return {
+            tag: {Path(item) for item in items}
+            for tag, items in tags.items()
+            if isinstance(items, list)
+        }
     
     def _load_all_tags(self) -> Dict[str, Set[Path]]:
-        """Load all tags from the filesystem."""
+        """Load all tags from the config file."""
         if self._cache is not None:
             return self._cache
             
-        if not self.vfs.exists(self._tags_dir):
-            self._cache = {}
-            return self._cache
-            
-        tags = {}
-        for entry in self.vfs.listdir(self._tags_dir):
-            if entry.name.endswith('.tag'):
-                tag_name = entry.name[:-4]  # Remove .tag extension
-                tags[tag_name] = self._load_tag_file(tag_name)
-                
-        self._cache = tags
-        return tags
+        self._cache = self._load_tags()
+        return self._cache
     
-    def _save_tag(self, tag: str, items: Set[Path]) -> None:
-        """Save a tag to its file."""
-        self._ensure_tags_dir()
-        tag_file = self._tags_dir / f"{tag}.tag"
+    def _save_tags(self, tags: Dict[str, Set[Path]]) -> None:
+        """Save all tags to the config file."""
+        # Load existing config or create new one
+        config = {}
+        if self.vfs.exists(self._config_file):
+            with self.vfs.open(self._config_file, 'r') as f:
+                config = yaml.safe_load(f) or {}
         
-        if not items:
-            if self.vfs.exists(tag_file):
-                self.vfs.remove(tag_file)
-            return
+        # Update the tags in the config
+        config['tags'] = {
+            tag: sorted(str(item) for item in items)
+            for tag, items in tags.items()
+            if items  # Only include non-empty tag sets
+        }
+        
+        # Save the updated config
+        with self.vfs.open(self._config_file, 'w') as f:
+            yaml.safe_dump(config, f, default_flow_style=False)
             
-        with self.vfs.open(tag_file, 'w') as f:
-            for item in sorted(str(i) for i in items):
-                f.write(f"{item}\n")
+        # Update the cache
+        self._cache = {k: v.copy() for k, v in tags.items()}
     
     def get_tags(self) -> Dict[str, List[Path]]:
-        """Get all tags and their associated items."""
+        """Get all tags and their associated items.
+        
+        Returns:
+            A dictionary mapping tag names to lists of paths, with each list sorted.
+        """
         return {tag: sorted(items) for tag, items in self._load_all_tags().items()}
     
     def get_items_with_tag(self, tag: str) -> List[Path]:
@@ -98,14 +97,17 @@ class FileBasedTags:
             
         if item not in tags[tag]:
             tags[tag].add(item)
-            self._save_tag(tag, tags[tag])
+            self._save_tags(tags)
     
     def remove_tag(self, item: Path, tag: str) -> None:
         """Remove a tag from an item."""
         tags = self._load_all_tags()
         if tag in tags and item in tags[tag]:
             tags[tag].remove(item)
-            self._save_tag(tag, tags[tag])
+            # If the tag is now empty, remove it completely
+            if not tags[tag]:
+                del tags[tag]
+            self._save_tags(tags)
     
     def invalidate_cache(self) -> None:
         """Invalidate the tag cache."""

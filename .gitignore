@@ -67,3 +67,7 @@ venv.bak/
 
 # Local development
 *.log
+
+
+# Test/Demo files
+example_project/

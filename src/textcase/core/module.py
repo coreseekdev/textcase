@@ -59,6 +59,11 @@ class BaseModule(Module):
         """Get the module's ordering interface."""
         if self._order is None:
             self._order = YamlOrder(self._path, self._vfs)
+            # Set the prefix from config if available
+            if hasattr(self._order, 'set_prefix') and hasattr(self, 'config'):
+                prefix = self.config.settings.get('prefix', '')
+                if prefix is not None:
+                    self._order.set_prefix(prefix)
         return self._order
     
     @property
@@ -79,6 +84,12 @@ class BaseModule(Module):
             
             # Initialize order and tags
             self._order = YamlOrder(self._path, self._vfs)
+            
+            # Set the prefix from config if available
+            if hasattr(self._order, 'set_prefix') and hasattr(self, 'config'):
+                prefix = self.config.settings.get('prefix', '')
+                if prefix is not None:
+                    self._order.set_prefix(prefix)
             self._tags = FileBasedTags(self._path, self._vfs)
             
             # Load submodules

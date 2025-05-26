@@ -19,7 +19,7 @@ __all__ = ['YamlModuleConfig']
 class YamlModuleConfig(ModuleConfig):
     """YAML-based implementation of ModuleConfig.
     
-    This implementation stores configuration in a YAML file at `.textcase/config.yml`
+    This implementation stores configuration in a YAML file at `.textcase.yml`
     within the module directory.
     """
     path: Path
@@ -42,7 +42,7 @@ class YamlModuleConfig(ModuleConfig):
         Returns:
             A new YamlModuleConfig instance loaded from storage.
         """
-        config_path = path / '.textcase' / 'config.yml'
+        config_path = path / '.textcase.yml'
         if not vfs.exists(config_path):
             return cls(path=path)
             
@@ -61,11 +61,7 @@ class YamlModuleConfig(ModuleConfig):
         Args:
             vfs: The virtual filesystem to use for saving.
         """
-        config_dir = self.path / '.textcase'
-        if not vfs.exists(config_dir):
-            vfs.makedirs(config_dir, exist_ok=True)
-            
-        config_path = config_dir / 'config.yml'
+        config_path = self.path / '.textcase.yml'
         data = {
             'settings': self.settings,
             'tags': self.tags
