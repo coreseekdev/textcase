@@ -55,12 +55,23 @@ class YamlOrder:
         files = []
         try:
             for entry in self.vfs.listdir(self.path):
-                entry_path = self.path / entry
-                # Skip directories and hidden files
+                # Get the entry name as string
+                if hasattr(entry, 'name'):  # FileStat object
+                    entry_name = entry.name
+                else:  # String path or other
+                    entry_name = str(entry)
+                
+                # Skip hidden files
+                if not isinstance(entry_name, str) or entry_name.startswith('.'):
+                    continue
+                    
+                # Build the full path
+                entry_path = self.path / entry_name
+                
+                # Skip directories and files that don't match the prefix
                 if (self.vfs.isfile(entry_path) and 
-                    not entry.startswith('.') and 
-                    (not self._prefix or entry.startswith(self._prefix))):
-                    files.append(Path(entry))
+                    (not self._prefix or entry_name.startswith(str(self._prefix)))):
+                    files.append(Path(entry_name))
             
             # Sort by creation time (oldest first)
             files.sort(key=lambda f: self._get_file_creation_time(self.path / f))
@@ -71,60 +82,139 @@ class YamlOrder:
         return files
     
     def _load_items(self) -> List[Path]:
-        """Load items from the index file or sort by creation time."""
+        """Load items from the index file or sort by creation time.
+        
+        The index file format is compatible with Doorstop's format:
+        ```yaml
+                
+        # Initial document version
+        initial: 1.0
+        
+        # Outline defines the hierarchy of items
+        outline:
+            - REQ001:  # Item text can be added as a comment
+            - REQ002:  # Another item
+                - REQ003:  # Child item (indented under REQ002)
+            - NEW:  # This will create a new item
+        """
         if self._items is not None:
             return self._items
             
-        # Try to load order from index.yml
+        # Get all existing files that match our criteria
+        existing_files = set()
+        if self.vfs.exists(self.path) and self.vfs.isdir(self.path):
+            try:
+                for entry in self.vfs.listdir(self.path):
+                    # Get the entry name as string
+                    if hasattr(entry, 'name'):  # FileStat object
+                        entry_name = entry.name
+                    else:  # String path or other
+                        entry_name = str(entry)
+                    
+                    # Skip hidden files
+                    if isinstance(entry_name, str) and entry_name.startswith('.'):
+                        continue
+                        
+                    # Build the full path
+                    entry_path = self.path / entry_name
+                    
+                    # Skip directories and non-matching prefixes
+                    if (self.vfs.isfile(entry_path) and 
+                        (not self._prefix or 
+                         (isinstance(entry_name, str) and 
+                          entry_name.startswith(str(self._prefix))))):
+                        existing_files.add(entry_name)
+            except Exception as e:
+                print(f"Warning: Failed to list directory {self.path}: {e}")
+        
+        # Try to load order from index.yml if it exists
         if self.vfs.exists(self._index_file):
             try:
                 with self.vfs.open(self._index_file, 'r') as f:
                     data = yaml.safe_load(f) or {}
                 
-                # If index.yml has an 'order' key, use it
-                if 'order' in data and isinstance(data['order'], list):
-                    # Get existing files that match the prefix
-                    existing_files = set()
-                    if self.vfs.exists(self.path) and self.vfs.isdir(self.path):
-                        try:
-                            for entry in self.vfs.listdir(self.path):
-                                entry_path = self.path / entry
-                                if (self.vfs.isfile(entry_path) and 
-                                    not entry.startswith('.') and 
-                                    (not self._prefix or entry.startswith(self._prefix))):
-                                    existing_files.add(entry)
-                        except Exception as e:
-                            print(f"Warning: Failed to list directory {self.path}: {e}")
-                    
-                    # Filter the order list to only include existing files that match the prefix
+                # If index.yml has an 'outline' key, use it (Doorstop compatibility)
+                if 'outline' in data and isinstance(data['outline'], list):
+                    ordered_items = self._parse_outline(data['outline'], existing_files)
+                    if ordered_items:
+                        self._items = ordered_items
+                        return self._items
+                # Fall back to simple 'order' key if 'outline' is not present
+                elif 'order' in data and isinstance(data['order'], list):
                     ordered_items = []
                     for item in data['order']:
                         item_str = str(item)
                         if (item_str in existing_files and 
-                            (not self._prefix or item_str.startswith(self._prefix))):
+                            (not self._prefix or item_str.startswith(str(self._prefix)))):
                             ordered_items.append(Path(item_str))
                     
                     self._items = ordered_items
                     return self._items
                     
             except Exception as e:
-                print(f"Warning: Failed to load order from index.yml: {e}")
+                print(f"Warning: Failed to load order from {self._index_file}: {e}")
         
-        # Fall back to creation time sorting
+        # Fall back to creation time sorting if no valid order is found
         self._items = self._get_files_sorted_by_creation()
         return self._items
+        
+    def _parse_outline(self, outline: list, existing_files: set) -> List[Path]:
+        """Parse a hierarchical outline structure into a flat list of paths.
+        
+        Args:
+            outline: The outline structure from the YAML file
+            existing_files: Set of existing files to validate against
+            
+        Returns:
+            List of paths in the order they appear in the outline
+        """
+        result = []
+        
+        def process_item(item):
+            if isinstance(item, dict):
+                for key, value in item.items():
+                    key_str = str(key)
+                    if key_str in existing_files:
+                        result.append(Path(key_str))
+                    if isinstance(value, list):
+                        for subitem in value:
+                            process_item(subitem)
+            elif isinstance(item, str):
+                item_str = str(item)
+                if item_str in existing_files:
+                    result.append(Path(item_str))
+        
+        for item in outline:
+            process_item(item)
+            
+        return result
     
     def _save_items(self) -> None:
-        """Save items to the index.yml file."""
+        """Save items to the index.yml file.
+        
+        The saved format is compatible with Doorstop's format for easier manual editing.
+        """
         if self._items is None:
             return
-            
-        # Create a simple structure with just the order
-        data = {'order': [str(item) for item in self._items]}
         
-        # Save to index.yml
+        # Create a header with instructions
+        header = """# THIS FILE IS USED TO DEFINE THE ORDER OF ITEMS
+# MANUALLY INDENT, DEDENT, & MOVE ITEMS TO THEIR DESIRED LEVEL
+# A NEW ITEM WILL BE ADDED FOR ANY UNKNOWN IDS, i.e. - new:
+# THE COMMENT WILL BE USED AS THE ITEM TEXT FOR NEW ITEMS
+#######################################################################
+"""
+        
+        # Create the data structure
+        data = {
+            'initial': '1.0',  # Document version
+            'outline': [str(item) for item in self._items]  # Flat list for now
+        }
+        
+        # Save to index.yml with the header
         with self.vfs.open(self._index_file, 'w') as f:
-            yaml.safe_dump(data, f, default_flow_style=False)
+            f.write(header)
+            yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
     
     def set_prefix(self, prefix: str) -> None:
         """Set the prefix for filtering files."""
