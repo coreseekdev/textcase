@@ -1,6 +1,12 @@
 # TextCase
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 A full-stack text-based Computer-Aided Software Engineering (CASE) tool that supports requirements management, testing, and modeling through a unified interface.
+
+## 📜 License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## ✨ Features
 

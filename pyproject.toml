@@ -2,10 +2,10 @@
 name = "textcase"
 version = "0.1.0"
 description = "A full-stack text-based CASE tool"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["coreseek.com <info@coreseek.com>"]
 readme = "README.md"
 packages = [{include = "textcase", from = "src"}]
-license = "MIT"
+license = "Apache-2.0"
 include = ["textcase/py.typed"]
 
 [tool.poetry.dependencies]
@@ -26,15 +26,15 @@ name = "textcase"
 version = "0.1.0"
 description = "A full-stack text-based CASE tool"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "coreseek.com", email = "info@coreseek.com"}
 ]
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License 2.0 (Apache-2.0)",
 ]
 
 [project.scripts]
