@@ -46,6 +46,8 @@ def main():
         'sep': '',
         'default_tag': ['important']
     })
+
+
     
     # Configure project tags
     project.config.tags.update({
@@ -66,15 +68,29 @@ def main():
         print("\nCreating 'requirements' submodule...")
         
         # Create the module directory first
-        module_path = project.path / "requirements"
+        module_path = project.path / "unittests"
         vfs.makedirs(module_path, exist_ok=True)
         
         # Create the module instance
         from textcase.core.module import YamlModule
+        from textcase.core.module_config import YamlModuleConfig
+        
+        # Create and configure the module
         submodule = YamlModule(module_path, vfs)
         
-        # Add the module to the project
-        project.add_module(parent_prefix="", module=submodule)
+        # Configure the module with a prefix
+        submodule.config.settings.update({
+            'prefix': 'TST',
+            'digits': 3,
+            'sep': '',
+            'default_tag': ['important']
+        })
+        
+        # Save the module's config first
+        submodule.save()
+        
+        # Add the module to the project with the project's prefix as parent
+        project.add_module(parent_prefix=project.config.settings['prefix'], module=submodule)
         print(f"Created submodule at: {submodule.path}")
         
         # Create a file in the submodule
@@ -107,6 +123,67 @@ def main():
         print("\nSubmodule tags:")
         for tag, items in submodule.tags.get_tags().items():
             print(f"  {tag}: {[str(i) for i in items]}")
+        
+        # Create a submodule under TST module
+        print("\nCreating 'spectest' submodule under TST...")
+        
+        # Create the submodule directory
+        submodule_path = project.path / "spectest"
+        vfs.makedirs(submodule_path, exist_ok=True)
+        
+        # Create the submodule instance
+        from textcase.core.module import YamlModule
+        
+        # Create and configure the submodule
+        submodule_lst = YamlModule(submodule_path, vfs)
+        
+        # Configure the submodule with a prefix
+        submodule_lst.config.settings.update({
+            'prefix': 'LST',
+            'digits': 3,
+            'sep': '',
+            'default_tag': ['test']
+        })
+        
+        # Save the submodule's config first
+        submodule_lst.save()
+        
+        # Add the submodule to the project with TST as parent
+        project.add_module(parent_prefix=submodule.prefix, module=submodule_lst)
+        print(f"Created submodule at: {submodule_lst.path}")
+        
+        # Save project again to include the new submodule
+        project.save()
+        print("\nUpdated project with new submodule.")
+        
+        # Create another submodule under TST module with path in unittests directory
+        print("\nCreating 'hightest' submodule under TST in unittests/hightest...")
+        
+        # Create the submodule directory inside the TST module
+        hst_module_path = submodule.path / "hightest"
+        vfs.makedirs(hst_module_path, exist_ok=True)
+        
+        # Create the submodule instance
+        submodule_hst = YamlModule(hst_module_path, vfs)
+        
+        # Configure the submodule with a prefix
+        submodule_hst.config.settings.update({
+            'prefix': 'HST',
+            'digits': 3,
+            'sep': '',
+            'default_tag': ['high']
+        })
+        
+        # Save the submodule's config first
+        submodule_hst.save()
+        
+        # Add the submodule to the project with TST as parent
+        project.add_module(parent_prefix=submodule.prefix, module=submodule_hst)
+        print(f"Created submodule at: {submodule_hst.path}")
+        
+        # Save project again to include the new submodule
+        project.save()
+        print("\nUpdated project with HST submodule under TST.")
         
         print("\nTest completed successfully!")
         

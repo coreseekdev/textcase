@@ -44,7 +44,14 @@ class YamlModuleConfig(ModuleConfig):
         """
         config_path = path / '.textcase.yml'
         if not vfs.exists(config_path):
-            return cls(path=path)
+            # Default settings for new modules
+            default_settings = {
+                'digits': 3,
+                'prefix': path.name.upper()[:3],  # First 3 chars of directory name
+                'sep': '',
+                'default_tag': ['important']
+            }
+            return cls(path=path, settings=default_settings)
             
         with vfs.open(config_path, 'r') as f:
             data = yaml.safe_load(f) or {}

@@ -7,7 +7,10 @@ This module provides the YAML-based implementation of the ProjectConfig protocol
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
+import yaml
+
 from ..protocol.module import ProjectConfig, SubmoduleInfo
+from ..protocol.vfs import VFS
 from .module_config import YamlModuleConfig
 
 __all__ = ['YamlProjectConfig']
@@ -19,27 +22,72 @@ class YamlProjectConfig(YamlModuleConfig, ProjectConfig):
     Submodule information is stored in the 'modules' section of .textcase.yml.
     """
     
-    def __init__(self, path: Path, settings: Dict[str, Any] = None, tags: Dict[str, str] = None):
+    def __init__(self, path: Path, settings: Dict[str, Any] = None, tags: Dict[str, str] = None, modules: Dict[str, Any] = None):
         """Initialize the project configuration.
         
         Args:
             path: The path to the project root directory.
             settings: Optional initial settings.
             tags: Optional initial tags.
+            modules: Optional initial modules configuration.
         """
         super().__init__(path, settings or {}, tags or {})
-        self._modules: Dict[str, Dict[str, str]] = {}
-        self._load_modules()
+        self._modules: Dict[str, Dict[str, str]] = modules or {}
+        
+    @classmethod
+    def load(cls, path: Path, vfs: VFS) -> 'YamlProjectConfig':
+        """Load configuration from a YAML file.
+        
+        Args:
+            path: The path to the module directory.
+            vfs: The virtual filesystem to use for loading.
+            
+        Returns:
+            A new YamlModuleConfig instance loaded from storage.
+        """
+        config_path = path / '.textcase.yml'
+        if not vfs.exists(config_path):
+            return cls(path=path)
+            
+        with vfs.open(config_path, 'r') as f:
+            data = yaml.safe_load(f) or {}
+            
+        return cls(
+            path=path,
+            settings=data.get('settings', {}),
+            tags=data.get('tags', {}),
+            modules=data.get('modules', {})
+        )
     
-    def _load_modules(self) -> None:
-        """Load module information from the configuration file."""
-        if 'modules' in self.settings and isinstance(self.settings['modules'], dict):
-            self._modules = cast(Dict[str, Dict[str, str]], self.settings['modules'])
-    
-    def _save_modules(self) -> None:
-        """Save module information to the settings dictionary."""
-        if self._modules:
-            self.settings['modules'] = self._modules
+    def save(self, vfs: VFS) -> None:
+        """Save configuration to a YAML file."""
+        data = {
+            'settings': self.settings,
+            'tags': self.tags,
+            'modules': self._modules
+        }
+        
+        config_path = self.path / '.textcase.yml'
+        
+        # Ensure parent directory exists
+        vfs.makedirs(self.path, exist_ok=True)
+        
+        # Use a temporary file for atomic write
+        temp_path = config_path.with_suffix('.tmp')
+        try:
+            with vfs.open(temp_path, 'w') as f:
+                yaml.safe_dump(data, f, default_flow_style=False)
+            
+            # Rename temp file to target (atomic on POSIX systems)
+            if vfs.exists(config_path):
+                vfs.remove(config_path)
+            vfs.move(temp_path, config_path)
+            
+        except Exception as e:
+            # Clean up temp file if it exists
+            if vfs.exists(temp_path):
+                vfs.remove(temp_path)
+            raise
     
     def add_submodule(self, prefix: str, path: Path, parent_prefix: Optional[str] = None) -> None:
         if not prefix or not prefix.strip():
@@ -48,13 +96,16 @@ class YamlProjectConfig(YamlModuleConfig, ProjectConfig):
         if self.get_submodule(prefix) is not None:
             raise ValueError(f"A submodule with prefix '{prefix}' already exists")
         
-        parent_key = parent_prefix if parent_prefix is not None else ''
+        # Use parent's prefix or empty string for root modules
+        parent_key = parent_prefix if parent_prefix is not None and parent_prefix.strip() else ''
         
+        # Add to modules dictionary
         if parent_key not in self._modules:
             self._modules[parent_key] = {}
             
-        self._modules[parent_key][prefix] = str(path)
-        self._save_modules()
+        # Store path with forward slashes for consistency
+        path_str = str(path).replace('\\', '/')
+        self._modules[parent_key][prefix] = path_str
     
     def remove_submodule(self, prefix: str) -> None:
         found = False
@@ -80,9 +131,12 @@ class YamlProjectConfig(YamlModuleConfig, ProjectConfig):
     def get_submodule(self, prefix: str) -> Optional[SubmoduleInfo]:
         for parent_key, modules in self._modules.items():
             if prefix in modules:
+                # Convert path to Path object, handling forward slashes
+                path_str = modules[prefix]
+                path = Path(path_str.replace('/', '\\') if '\\' in path_str else path_str)
                 return SubmoduleInfo(
                     prefix=prefix,
-                    path=Path(modules[prefix]),
+                    path=path,
                     parent_prefix=parent_key if parent_key else None
                 )
         return None

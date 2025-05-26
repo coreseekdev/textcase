@@ -232,6 +232,16 @@ class Module(Protocol):
         
     @property
     @abstractmethod
+    def prefix(self) -> str:
+        """Get the module's prefix.
+        
+        The prefix is used to identify the module within the project hierarchy.
+        It should be unique among siblings.
+        """
+        ...
+        
+    @property
+    @abstractmethod
     def config(self) -> ModuleConfig:
         """Get the module's configuration."""
         ...
@@ -293,10 +303,11 @@ class Project(Module, Protocol):
         """Add an existing module to the project.
         
         Args:
-            parent_prefix: The prefix of the parent module.
-            module: The module instance to add.
+            parent_prefix: The prefix of the parent module. Must not be empty.
+            module: The module instance to add. Must have a non-empty prefix.
             
         Raises:
+            ValueError: If parent_prefix is empty or module has no prefix.
             ValueError: If a module with the given prefix already exists.
             ValueError: If the module's path is not within the project directory.
         """

@@ -48,6 +48,17 @@ class BaseModule(Module):
     def path(self) -> Path:
         """Get the module's filesystem path."""
         return self._path
+        
+    @property
+    def prefix(self) -> Optional[str]:
+        """Get the module's prefix from config.
+        
+        Returns:
+            The prefix string if configured, None otherwise.
+        """
+        if self.config and 'prefix' in self.config.settings:
+            return self.config.settings['prefix']
+        return None
     
     @property
     def config(self) -> YamlModuleConfig:

@@ -86,25 +86,44 @@ class _YamlProject(YamlModule, Project):
         """Add an existing module to the project.
         
         Args:
-            parent_prefix: The prefix of the parent module.
-            module: The module instance to add.
+            parent_prefix: The prefix of the parent module. Must not be empty.
+            module: The module instance to add. Must have a non-empty prefix.
             
         Raises:
+            ValueError: If parent_prefix is empty or module has no prefix.
             ValueError: If a module with the same prefix already exists.
             ValueError: If the module's path is not within the project directory.
         """
+        # Validate parent_prefix is not empty
+        if not parent_prefix or not parent_prefix.strip():
+            raise ValueError("parent_prefix cannot be empty")
+            
+        # Validate module has a valid prefix
+        if not module.prefix or not module.prefix.strip():
+            raise ValueError("Module must have a non-empty prefix")
+            
         # Verify the module path is within the project
         try:
             rel_path = module.path.relative_to(self.path)
         except ValueError:
             raise ValueError("Module path must be within the project directory")
             
-        # Check if a module with this prefix already exists
+        # Check if a module with this path already exists
         if module.path.name in (m.path.name for m in self._submodules.values()):
             raise ValueError(f"A module with path '{module.path.name}' already exists")
             
-        # Add to project config
-        self.config.add_submodule(module.path.name, rel_path, parent_prefix)
+        # Create module directory if it doesn't exist
+        if not self._vfs.exists(module.path):
+            self._vfs.makedirs(module.path, exist_ok=True)
+            
+        # Save the module's configuration
+        module.save()
+        
+        # Convert path to use forward slashes for consistency across platforms
+        rel_path_str = str(rel_path).replace('\\', '/')
+        
+        # Add to project config using the module's prefix and parent's actual prefix
+        self.config.add_submodule(module.prefix, Path(rel_path_str), parent_prefix)
         self.config.save(self._vfs)
         
         # Add to submodules cache
