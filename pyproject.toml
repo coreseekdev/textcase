@@ -1,6 +1,18 @@
+[tool.poetry]
+name = "textcase"
+version = "0.1.0"
+description = "A full-stack text-based CASE tool"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "textcase", from = "src"}]
+license = "MIT"
+
+[tool.poetry.scripts]
+tse = "textcase.cli:main"
+
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "textcase"
@@ -26,3 +38,11 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+black = "^23.7.0"
+isort = "^5.12.0"
+mypy = "^1.5.0"
+flake8 = "^6.1.0"
