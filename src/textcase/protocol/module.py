@@ -289,20 +289,19 @@ class Project(Module, Protocol):
         ...
         
     @abstractmethod
-    def create_submodule(self, name: str) -> Module:
-        """Create a new submodule in the project.
+    def add_module(self, parent_prefix: str, module: Module) -> None:
+        """Add an existing module to the project.
         
         Args:
-            name: The name for the new submodule.
-            
-        Returns:
-            The newly created Module.
+            parent_prefix: The prefix of the parent module.
+            module: The module instance to add.
             
         Raises:
-            ValueError: If a submodule with the given name already exists.
+            ValueError: If a module with the given prefix already exists.
+            ValueError: If the module's path is not within the project directory.
         """
         ...
-        
+  
     @abstractmethod
     def __getitem__(self, name: str) -> Module:
         """Get a submodule by name.

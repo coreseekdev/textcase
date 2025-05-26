@@ -28,11 +28,11 @@ class _YamlProject(YamlModule, Project):
             path: The path to the project root directory.
             vfs: Optional virtual filesystem to use.
         """
-        vfs = vfs or get_default_vfs()
+        self._vfs = vfs or get_default_vfs()
         # Initialize the parent class first
-        super().__init__(path, vfs)
+        super().__init__(path, self._vfs)
         # Then set up project-specific attributes
-        self._config = YamlProjectConfig.load(path, vfs)
+        self._config = YamlProjectConfig.load(path, self._vfs)
         self._submodules: Dict[str, Module] = {}
         self._load_submodules()
     
@@ -82,29 +82,33 @@ class _YamlProject(YamlModule, Project):
                 
         return best_match
     
-    def create_submodule(self, name: str) -> Module:
-        if not name or not name.strip():
-            raise ValueError("Module name cannot be empty")
-            
-        # Normalize name to use as prefix
-        prefix = name.lower().replace(' ', '_')
+    def add_module(self, parent_prefix: str, module: Module) -> None:
+        """Add an existing module to the project.
         
-        # Check if already exists
-        if any(m.path.name == name for m in self._submodules.values()):
-            raise ValueError(f"A module named '{name}' already exists")
+        Args:
+            parent_prefix: The prefix of the parent module.
+            module: The module instance to add.
             
-        # Create the module directory
-        module_path = self.path / name
-        self._vfs.makedirs(module_path, exist_ok=True)
-        
+        Raises:
+            ValueError: If a module with the same prefix already exists.
+            ValueError: If the module's path is not within the project directory.
+        """
+        # Verify the module path is within the project
+        try:
+            rel_path = module.path.relative_to(self.path)
+        except ValueError:
+            raise ValueError("Module path must be within the project directory")
+            
+        # Check if a module with this prefix already exists
+        if module.path.name in (m.path.name for m in self._submodules.values()):
+            raise ValueError(f"A module with path '{module.path.name}' already exists")
+            
         # Add to project config
-        self.config.add_submodule(prefix, Path(name))
+        self.config.add_submodule(module.path.name, rel_path, parent_prefix)
         self.config.save(self._vfs)
         
-        # Create and return the module
-        module = YamlModule(module_path, self._vfs)
-        self._submodules[prefix] = module
-        return module
+        # Add to submodules cache
+        self._submodules[module.path.name] = module
     
     def __getitem__(self, name: str) -> Module:
         for prefix, module in self._submodules.items():

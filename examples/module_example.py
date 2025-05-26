@@ -64,7 +64,17 @@ def main():
     # Create a submodule
     try:
         print("\nCreating 'requirements' submodule...")
-        submodule = project.create_submodule("requirements")
+        
+        # Create the module directory first
+        module_path = project.path / "requirements"
+        vfs.makedirs(module_path, exist_ok=True)
+        
+        # Create the module instance
+        from textcase.core.module import YamlModule
+        submodule = YamlModule(module_path, vfs)
+        
+        # Add the module to the project
+        project.add_module(parent_prefix="", module=submodule)
         print(f"Created submodule at: {submodule.path}")
         
         # Create a file in the submodule

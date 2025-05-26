@@ -15,12 +15,10 @@
 #
 """Default implementation of the Module protocol."""
 
-import os
-import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Type, TypeVar, cast
 
-from ..protocol.module import Module, ModuleConfig, ModuleOrder, ModuleTags
+from ..protocol.module import Module, ModuleOrder, ModuleTags
 from ..protocol.vfs import VFS
 from .module_config import YamlModuleConfig
 from .order import YamlOrder
@@ -31,11 +29,15 @@ T = TypeVar('T', bound='BaseModule')
 class BaseModule(Module):
     """Base implementation of the Module protocol."""
     
-    def __init__(self, path: Path, vfs: VFS, parent: Optional['BaseModule'] = None):
-        """Initialize the module."""
+    def __init__(self, path: Path, vfs: VFS):
+        """Initialize the module.
+        
+        Args:
+            path: The filesystem path of the module.
+            vfs: The virtual filesystem to use for file operations.
+        """
         self._path = path
         self._vfs = vfs
-        self._parent = parent
         self._config: Optional[YamlModuleConfig] = None
         self._order: Optional[ModuleOrder] = None
         self._tags: Optional[ModuleTags] = None
