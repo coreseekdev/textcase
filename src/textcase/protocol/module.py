@@ -429,23 +429,6 @@ class Module(Protocol):
         """
         ...
 
-    @abstractmethod
-    def new_item_n(self, n: int = 1, default_content: str = '') -> list[DocumentCaseItem]:
-        """Create multiple new document items in this module.
-        
-        Args:
-            n: Number of items to create. Defaults to 1.
-            default_content: Default content for the new documents.
-            
-        Returns:
-            A list of created DocumentCaseItem objects. If editor_mode is True and user
-            cancels, the cancelled items will not be included in the list.
-            
-        Note:
-            When n=1, this method behaves similarly to new_item() but always returns a list.
-        """
-        ...
-
 
 class Project(Module, Protocol):
     """Protocol for a project, which is the root module in the module hierarchy.

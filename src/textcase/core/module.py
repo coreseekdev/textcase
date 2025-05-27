@@ -258,17 +258,3 @@ class YamlModule(BaseModule):
             None as this is just a placeholder implementation.
         """
         return None
-        
-    def new_item_n(self, n: int = 1, default_content: str = ''):
-        """Create multiple new document items in this module.
-        
-        This is a placeholder implementation that returns an empty list.
-        
-        Args:
-            n: Number of items to create. Not used in this implementation.
-            default_content: Default content for the new documents. Not used.
-            
-        Returns:
-            An empty list as this is just a placeholder implementation.
-        """
-        return []

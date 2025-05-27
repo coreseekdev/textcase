@@ -84,12 +84,13 @@ class YamlOrder(ModuleOrder):
         try:
             # Get all files in the directory
             files = []
-            for entry in self.vfs.scandir(self.path):
-                if self.vfs.isfile(entry) and entry.name.startswith(self._prefix):
-                    files.append(entry)
+            for entry_name in self.vfs.listdir_names(self.path):
+                entry_path = self.path / entry_name
+                if self.vfs.isfile(entry_path) and entry_name.startswith(self._prefix):
+                    files.append(entry_name)
             
             # Create CaseItem objects for all files
-            case_items = [self._create_case_item(Path(f.name)) for f in files]
+            case_items = [self._create_case_item(Path(f)) for f in files]
             
             # Sort by creation time
             return sorted(case_items, key=self._get_file_creation_time)
