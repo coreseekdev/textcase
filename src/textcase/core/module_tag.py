@@ -61,14 +61,28 @@ class FileBasedModuleTags(ModuleTagging):
         if not self._vfs.exists(tag_file):
             return set()
             
-        with self._vfs.open(tag_file, 'r') as f:
-            return {line.strip() for line in f if line.strip()}
+        try:
+            with self._vfs.open(tag_file, 'r') as f:
+                content = f.read()
+                # Ensure we decode bytes to string if needed
+                if isinstance(content, bytes):
+                    content = content.decode('utf-8')
+                return {line.strip() for line in content.splitlines() if line.strip()}
+        except Exception as e:
+            print(f"Error reading tag file {tag_file}: {e}")
+            return set()
     
     def _write_tag_file(self, tag_file: Path, item_keys: Set[str]) -> None:
         """Write item keys to a tag file."""
-        with self._vfs.open(tag_file, 'w') as f:
-            for item_key in sorted(item_keys):
-                f.write(f"{item_key}\n")
+        try:
+            content = '\n'.join(sorted(item_keys)) + '\n' if item_keys else ''
+            # Ensure we write strings, not bytes
+            if isinstance(content, str):
+                content = content.encode('utf-8')
+            with self._vfs.open(tag_file, 'wb') as f:  # Use binary mode for consistency
+                f.write(content)
+        except Exception as e:
+            print(f"Error writing to tag file {tag_file}: {e}")
     
     def add_tag(self, item: CaseItem, tag: str) -> None:
         if not isinstance(item, DocumentCaseItem):
@@ -136,14 +150,17 @@ class FileBasedModuleTags(ModuleTagging):
         available_tags = self.get_tags(doc_item.prefix)
         if not available_tags:
             return []
-            
+        
+        # print("available_tags: %s" % available_tags)
         # Only check tag files that are in the available tags
         tags = []
         for tag in available_tags:
             tag_file = self._get_tag_file(tag)
             if self._vfs.isfile(tag_file):
-                item_keys = self._read_tag_file(tag_file)
-                if doc_item.key in item_keys:
+                # print("read tag_file: %s" % doc_item.key)
+                # print("tag_file items: %s" % self._read_tag_file(tag_file))
+                # Check if the document ID is in the tag file
+                if doc_item.key in self._read_tag_file(tag_file):
                     tags.append(tag)
                     
         return sorted(tags)  

@@ -216,26 +216,39 @@ class BaseModule(Module):
             module.save()
             
     def get_document_item(self, id: str) -> 'DocumentItem':
-        """Get a DocumentCaseItem for the given ID using this module's prefix.
+        """Get a DocumentCaseItem for the given ID using this module's prefix and settings.
         
-        The returned DocumentItem will use this module's prefix and the provided ID.
+        The returned DocumentItem will use this module's prefix, settings and the provided ID.
         This does not require the item to exist on disk.
         
         Args:
             id: The ID of the document item.
                 
         Returns:
-            A DocumentItem with the module's prefix and the given ID.
+            A DocumentItem with the module's prefix, settings and the given ID.
             
         Raises:
-            ValueError: If the module doesn't have a prefix set.
+            ValueError: If the module doesn't have a prefix set or ID is invalid.
         """
+        if not id:
+            raise ValueError("Document ID cannot be empty")
+            
         prefix = self.prefix
         if not prefix:
             raise ValueError("Cannot create document item: module has no prefix")
             
+        # Get relevant settings from config
+        settings = {}
+        if self._config and hasattr(self._config, 'settings'):
+            # Create a copy of the settings to avoid modifying the original
+            settings = dict(self._config.settings)
+            # Ensure we have default values
+            settings.setdefault('sep', '-')
+            # Always use the module's prefix, not the one from settings
+            settings['prefix'] = prefix
+            
         from .document_item import DocumentItem
-        return DocumentItem(prefix=prefix, id=id)
+        return DocumentItem(id=id, prefix=prefix, settings=settings)
 
 class YamlModule(BaseModule):
     pass  # 作为别名

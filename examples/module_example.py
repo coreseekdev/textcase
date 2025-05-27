@@ -55,6 +55,41 @@ def main():
         'documentation': 'Documentation related items'
     })
     
+    # Example of getting document items with different settings
+    print("\nTesting document item key formatting:")
+    
+    # Test with default settings (no separator, 3 digits)
+    project.config.settings.update({
+        'digits': 3,
+        'sep': '',
+        'prefix': 'REQ'
+    })
+    item1 = project.get_document_item("1")
+    print(f"\n1. Default settings (digits=3, sep=''):")
+    print(f"   Input ID: '1' -> Key: {item1.key} (prefix: {item1.prefix}, id: {item1.id})")
+    
+    # Test with separator and different digits
+    project.config.settings.update({
+        'digits': 4,
+        'sep': '-',
+        'prefix': 'REQ'
+    })
+    item2 = project.get_document_item("42")
+    print(f"\n2. With separator and 4 digits:")
+    print(f"   Input ID: '42' -> Key: {item2.key} (prefix: {item2.prefix}, id: {item2.id})")
+    
+    # Test with non-numeric ID
+    item3 = project.get_document_item("ABC")
+    print(f"\n3. Non-numeric ID:")
+    print(f"   Input ID: 'ABC' -> Key: {item3.key} (prefix: {item3.prefix}, id: {item3.id})")
+    
+    # Restore original settings
+    project.config.settings.update({
+        'digits': 3,
+        'sep': '',
+        'prefix': 'REQ'
+    })
+    
     # Save the initial configuration
     project.save()
     
@@ -107,13 +142,26 @@ def main():
         print(f"Adding {rel_path} to module order...")
         submodule.order.add_item(rel_path)
         
-        # Add a tag to the file
-        print(f"Adding tag 'important' to {rel_path}...")
         # Get the document item using the module's get_document_item method
-        # The ID is the filename without extension
-        doc_id = rel_path.stem
-        doc_item = project.get_document_item(doc_id)
-        project.tags.add_tag(doc_item, "important")
+        # The ID is just the numeric part, prefix comes from the module's settings
+        doc_id = rel_path.stem.replace(project.config.settings['prefix'], '')  # Remove prefix if present
+        doc_item = submodule.get_document_item(doc_id)
+        print(f"\nDocument Item Info:")
+        print(f"  - Key: {doc_item.key}")
+        print(f"  - Display ID: {doc_item.display_id}")
+        print(f"  - Prefix: {doc_item.prefix}")
+        print(f"  - ID: {doc_item.id}")
+        print(f"  - Separator: '{doc_item.sep}'")
+        
+        # Add multiple tags to the document
+        tags_to_add = ["important", "documentation", "high-priority"]
+        for tag in tags_to_add:
+            print(f"Adding tag '{tag}' to {doc_item.key}...")
+            try:
+                submodule.tags.add_tag(doc_item, tag)
+                print(f"  - Successfully added tag: {tag}")
+            except ValueError as e:
+                print(f"  - Could not add tag '{tag}': {e}")
         
         # Save changes
         print("\nSaving project...")
@@ -124,9 +172,19 @@ def main():
         for item in submodule.order.get_ordered_items():
             print(f"  - {item}")
         
-        print("\nSubmodule tags:")
-        for tag in submodule.tags.get_tags():
-            print(f"  {tag}")
+        # Get and print all available tags
+        print("\nAll available tags:")
+        for tag in project.tags.get_tags():
+            print(f"  - {tag}")
+            
+        # Get and print tags specifically for our document
+        print("\nTags for the document: %s" % doc_item.key)
+        doc_tags = submodule.tags.get_item_tags(doc_item)
+        if doc_tags:
+            for tag in doc_tags:
+                print(f"  - {tag}")
+        else:
+            print("  No tags found for this document")
         
         # Create a submodule under TST module
         print("\nCreating 'spectest' submodule under TST...")
