@@ -29,6 +29,11 @@ class YamlOrder(ModuleOrder):
     If index.yml exists, it will be used to determine the order of files.
     Otherwise, files will be sorted by creation time.
     Only files starting with the configured prefix will be included.
+
+    Order 不完全是排序，如存在 index.yml 的 outline 节时，允许通过锁进（YML 里面的 sub item ) 描述父子关系。
+
+    index.yml 中需要记录下一个候选的 item id ( 不带 prefix 的流水号 )
+
     """
     
     def __init__(self, path: Path, vfs: VFS):
@@ -98,36 +103,15 @@ class YamlOrder(ModuleOrder):
         if item_id in self._case_item_cache:
             return self._case_item_cache[item_id]
             
-        # Create a simple CaseItem implementation
-        class SimpleCaseItem(CaseItem):
-            def __init__(self, _id: str, _path: Path):
-                self._id = _id
-                self._path = _path
-                
-            @property
-            def prefix(self) -> str:
-                return self._path.parent.name
-                
-            @property
-            def id(self) -> str:
-                return self._id
-                
-            @property
-            def key(self) -> str:
-                return f"{self.prefix}:{self._id}"
-                
-            def __str__(self) -> str:
-                return self.key
-                
-            def __eq__(self, other: object) -> bool:
-                if not isinstance(other, (SimpleCaseItem, str)):
-                    return False
-                return str(self) == str(other)
-                
-            def __hash__(self) -> int:
-                return hash(str(self))
+        from .module_item import CaseItemBase
         
-        case_item = SimpleCaseItem(item_id, path)
+        # Create a CaseItem using CaseItemBase
+        case_item = CaseItemBase(
+            id=item_id,
+            prefix=path.parent.name,
+            _path=path  # Store the path as an attribute
+        )
+        
         self._case_item_cache[item_id] = case_item
         return case_item
         
@@ -173,7 +157,6 @@ class YamlOrder(ModuleOrder):
                 return self._get_files_sorted_by_creation()
         else:
             return self._get_files_sorted_by_creation()
-        return self._items
         
     def _parse_outline(self, outline: list, existing_files: set) -> List[CaseItem]:
         """Parse a hierarchical outline structure into a flat list of CaseItems.

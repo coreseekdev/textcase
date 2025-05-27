@@ -247,8 +247,8 @@ class BaseModule(Module):
             # Always use the module's prefix, not the one from settings
             settings['prefix'] = prefix
             
-        from .module_item import DocumentItem
-        return DocumentItem(id=id, prefix=prefix, settings=settings)
+        from .module_item import FileDocumentItem
+        return FileDocumentItem(id, prefix, settings=settings)
 
 class YamlModule(BaseModule):
     """YAML-based implementation of the Module protocol."""
