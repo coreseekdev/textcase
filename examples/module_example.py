@@ -109,7 +109,11 @@ def main():
         
         # Add a tag to the file
         print(f"Adding tag 'important' to {rel_path}...")
-        submodule.tags.add_tag(rel_path, "important")
+        # Get the document item using the module's get_document_item method
+        # The ID is the filename without extension
+        doc_id = rel_path.stem
+        doc_item = project.get_document_item(doc_id)
+        project.tags.add_tag(doc_item, "important")
         
         # Save changes
         print("\nSaving project...")
@@ -121,8 +125,8 @@ def main():
             print(f"  - {item}")
         
         print("\nSubmodule tags:")
-        for tag, items in submodule.tags.get_tags().items():
-            print(f"  {tag}: {[str(i) for i in items]}")
+        for tag in submodule.tags.get_tags():
+            print(f"  {tag}")
         
         # Create a submodule under TST module
         print("\nCreating 'spectest' submodule under TST...")
