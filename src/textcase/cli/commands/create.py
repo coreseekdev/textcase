@@ -23,6 +23,7 @@ from typing import Optional, Dict, Any, List
 
 from textcase.core.module import YamlModule
 from textcase.protocol.module import Module
+from textcase.cli.utils import debug_echo
 
 @click.command()
 @click.argument('prefix', type=str)
@@ -58,6 +59,24 @@ def create(ctx: click.Context, prefix: str, module_path: Path, parent: Optional[
         click.echo("A valid project with a .textcase.yml file is required when creating submodules.")
         ctx.exit(1)
     
+    # Debug project information
+    if project:
+        debug_echo(ctx, f"Project path: {project.path}")
+        debug_echo(ctx, f"Project prefix: {project.prefix}")
+        # Safely get submodules
+        try:
+            submodules = project.get_submodules()
+            submodule_prefixes = []
+            for m in submodules:
+                try:
+                    if hasattr(m, 'prefix'):
+                        submodule_prefixes.append(m.prefix)
+                except Exception:
+                    pass
+            debug_echo(ctx, f"Available submodules: {submodule_prefixes}")
+        except Exception as e:
+            debug_echo(ctx, f"Error getting submodules: {e}")
+    
     # Resolve module path
     if project and not module_path.is_absolute():
         # If we have a project, resolve relative to project path
@@ -78,28 +97,24 @@ def create(ctx: click.Context, prefix: str, module_path: Path, parent: Optional[
         project_path = Path.cwd()
     
     # Check if parent module exists when specified
-    parent_module = None
+    parent_prefix = None
     if parent:
+        debug_echo(ctx, f"Looking for parent module with prefix '{parent}'")
         # 父模块是否是 Project 自身
         if parent == project.prefix:
-            parent_module = project
+            debug_echo(ctx, f"Parent module is the project itself")
+            parent_prefix = project.prefix
         else:
-            # First check if the project has the parent module in its configuration
+            # Check if the project has the parent module in its configuration
             parent_info = project.config.get_submodule(parent)
+            debug_echo(ctx, f"Parent info from config: {parent_info}")
             if not parent_info:
-                # If not in config, check loaded submodules as fallback
-                parent_modules = [m for m in project.get_submodules() if m.prefix == parent]
-                if not parent_modules:
-                    click.echo(f"Error: Parent module with prefix '{parent}' not found in project configuration", err=True)
-                    ctx.exit(1)
-                parent_module = parent_modules[0]
-            else:
-                # Parent exists in config, ensure it's loaded
-                try:
-                    parent_module = project._load_submodule(parent_info)
-                except Exception as e:
-                    click.echo(f"Error loading parent module '{parent}': {e}", err=True)
+                click.echo(f"Error: Parent module with prefix '{parent}' not found in project configuration", err=True)
                 ctx.exit(1)
+            else:
+                # Parent exists in config, use its prefix
+                parent_prefix = parent
+                debug_echo(ctx, f"Using parent prefix: {parent_prefix}")
     
     # Check if .textcase.yml already exists in the target directory
     config_file = module_path / '.textcase.yml'
@@ -116,6 +131,7 @@ def create(ctx: click.Context, prefix: str, module_path: Path, parent: Optional[
     
     # Create the module instance
     try:
+        debug_echo(ctx, f"Creating module at {module_path}")
         module = YamlModule(module_path, vfs)
         
         # Configure module settings
@@ -150,16 +166,26 @@ def create(ctx: click.Context, prefix: str, module_path: Path, parent: Optional[
         
         # Add the module to the project if we have one
         if project:
-            # If this is a submodule, add it to the parent
-            if parent_module:
-                # Get the parent's prefix or use empty string for root
-                parent_prefix = getattr(parent_module, 'prefix', '')
-                project.add_module(parent_prefix, module)
-                click.echo(f"Created submodule '{prefix}' at {module_path} with parent '{parent}'")
-            else:
-                # Add as a root module
-                project.add_module('', module)
-                click.echo(f"Created module '{prefix}' at {module_path}")
+            debug_echo(ctx, f"Adding module to project")
+            try:
+                # If this is a submodule, add it to the parent
+                if parent_prefix:
+                    debug_echo(ctx, f"Using parent prefix: '{parent_prefix}'")
+                    # Register the module in the project configuration
+                    project.config.add_submodule(prefix, module_path.relative_to(project.path), parent_prefix)
+                    # Save the configuration
+                    project.config.save(vfs)
+                    click.echo(f"Created submodule '{prefix}' at {module_path} with parent '{parent}'")
+                else:
+                    # Add as a root module
+                    # Register the module in the project configuration as a root module
+                    project.config.add_submodule(prefix, module_path.relative_to(project.path))
+                    # Save the configuration
+                    project.config.save(vfs)
+                    click.echo(f"Created module '{prefix}' at {module_path}")
+            except Exception as e:
+                click.echo(f"Error adding module to project: {e}", err=True)
+                ctx.exit(1)
             
             # Save the project to update configuration
             project.save()

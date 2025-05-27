@@ -37,8 +37,9 @@ from .commands.archive import archive
 @click.group(invoke_without_command=True)
 @click.option('--project-path', '-p', type=click.Path(exists=True, file_okay=False, path_type=Path), 
               help='Path to an existing project directory')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.pass_context
-def cli(ctx: click.Context, project_path: Optional[Path] = None):
+def cli(ctx: click.Context, project_path: Optional[Path] = None, verbose: bool = False):
     """TextCase - A full-stack text-based CASE tool.
     
     This tool requires an existing project with a .textcase.yml file.
@@ -46,6 +47,9 @@ def cli(ctx: click.Context, project_path: Optional[Path] = None):
     """
     # Ensure that ctx.obj exists and is a dict
     ctx.ensure_object(dict)
+    
+    # Store verbose flag in context
+    ctx.obj['verbose'] = verbose
     
     # Get project path (default to current directory if not specified)
     project_path = (project_path or Path.cwd()).absolute()
