@@ -13,36 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Protocol definitions for TextCase."""
+"""Utility functions for CLI commands."""
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Type, TypeVar, Union
+import click
 
-# VFS protocol
-from .vfs import VFS, FileHandle, FileStat, FileSeek, TempDir
-
-# Module protocol
-from .module import (
-    Module,
-    ModuleConfig,
-    ModuleOrder
-)
-
-# For backward compatibility
-from .vfs import VFS as VFSProtocol
-
-__all__ = [
-    # VFS related
-    'VFS',
-    'VFSProtocol',
-    'FileHandle',
-    'FileStat',
-    'FileSeek',
-    'TempDir',
+def debug_echo(ctx: click.Context, message: str) -> None:
+    """Echo a debug message only if verbose mode is enabled.
     
-    # Module related
-    'Module',
-    'ModuleConfig',
-    'ModuleOrder',
-    'ModuleTags',
-]
+    Args:
+        ctx: The Click context object.
+        message: The message to echo.
+    """
+    if ctx.obj.get('verbose', False):
+        click.echo(f"Debug: {message}")

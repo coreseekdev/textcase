@@ -32,9 +32,11 @@ __all__ = [
     'FileHandle',
     'VFS',
     'FileStat',
+    'TempDir',
 ]
 
 T = TypeVar('T', bound='FileHandle')
+D = TypeVar('D', bound='TempDir')
 
 class FileSeek(Enum):
     """File seek modes."""
@@ -139,6 +141,74 @@ class FileStat:
         )
 
 @runtime_checkable
+class TempDir(Protocol):
+    """Temporary directory protocol.
+    
+    This protocol defines the interface that all temporary directory implementations must provide.
+    A temporary directory can optionally be an overlay on top of an existing directory.
+    """
+    
+    @property
+    @abstractmethod
+    def path(self) -> str:
+        """Get the path to the temporary directory."""
+        ...
+    
+    @property
+    @abstractmethod
+    def is_overlay(self) -> bool:
+        """Return True if this temporary directory is an overlay on an existing directory."""
+        ...
+    
+    @property
+    @abstractmethod
+    def overlay_target(self) -> Optional[str]:
+        """Return the path of the directory this temporary directory is overlaying, if any."""
+        ...
+    
+    @abstractmethod
+    def commit(self) -> None:
+        """Commit changes to the underlying directory if this is an overlay.
+        
+        For non-overlay temporary directories, this is a no-op.
+        """
+        ...
+    
+    @abstractmethod
+    def rollback(self) -> None:
+        """Discard changes and revert to the original state if this is an overlay.
+        
+        For non-overlay temporary directories, this is a no-op.
+        """
+        ...
+    
+    @abstractmethod
+    def close(self) -> None:
+        """Close the temporary directory and clean up resources.
+        
+        This will delete the temporary directory if it has not been committed.
+        """
+        ...
+    
+    def __enter__(self: D) -> D:
+        """Context manager entry."""
+        return self
+    
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Optional[bool]:
+        """Context manager exit.
+        
+        Automatically closes the temporary directory without committing.
+        """
+        self.close()
+        return None
+
+
+@runtime_checkable
 class VFS(Protocol):
     """Virtual File System protocol.
     
@@ -230,4 +300,53 @@ class VFS(Protocol):
     @abstractmethod
     def move(self, src: Union[str, Path], dst: Union[str, Path]) -> None:
         """Move a file or directory."""
+        ...
+    
+    @abstractmethod
+    def create_temp_file(self, prefix: Optional[str] = None, suffix: Optional[str] = None, dir: Optional[Union[str, Path]] = None) -> tuple[str, FileHandle]:
+        """Create a temporary file and return its path and a file handle.
+        
+        Args:
+            prefix: Optional prefix for the temporary file name
+            suffix: Optional suffix for the temporary file name (e.g., '.txt')
+            dir: Optional directory where the temp file should be created
+                 If None, system default temporary directory is used
+                 
+        Returns:
+            A tuple containing the path to the temporary file and an open file handle
+        """
+        ...
+    
+    @abstractmethod
+    def create_temp_dir(self, prefix: Optional[str] = None, suffix: Optional[str] = None, base_dir: Optional[Union[str, Path]] = None) -> TempDir:
+        """Create a temporary directory.
+        
+        Args:
+            prefix: Optional prefix for the temporary directory name
+            suffix: Optional suffix for the temporary directory name
+            base_dir: Optional parent directory where the temp directory should be created
+                     If None, system default temporary directory is used
+                     
+        Returns:
+            A TempDir object representing the temporary directory
+        """
+        ...
+    
+    @abstractmethod
+    def create_overlay_temp_dir(self, target_dir: Union[str, Path], prefix: Optional[str] = None, suffix: Optional[str] = None, base_dir: Optional[Union[str, Path]] = None) -> TempDir:
+        """Create a temporary directory that acts as an overlay on top of an existing directory.
+        
+        Changes made in the overlay directory can be committed to the target directory
+        or discarded using the TempDir interface.
+        
+        Args:
+            target_dir: The directory to overlay
+            prefix: Optional prefix for the temporary directory name
+            suffix: Optional suffix for the temporary directory name
+            base_dir: Optional parent directory where the temp directory should be created
+                     If None, system default temporary directory is used
+                     
+        Returns:
+            A TempDir object representing the overlay temporary directory
+        """
         ...

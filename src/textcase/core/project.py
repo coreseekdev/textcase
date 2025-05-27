@@ -111,7 +111,7 @@ class _YamlProject(YamlModule, Project, ProjectTags):
             return self._submodules[info.prefix]
             
         # Create the module with self as the project
-        module = YamlModule(self, module_path, self._vfs)
+        module = YamlModule(module_path, self._vfs, self)
         
         # Add to submodules dictionary with both name and full prefix as keys
         module_name = module_path.name
@@ -242,6 +242,7 @@ class _YamlProject(YamlModule, Project, ProjectTags):
         # Remove the directory
         # In a real implementation, you might want to move to trash instead
         # or require a force flag
+        # TODO: 是否真的需要物理的删除文件？ 已经 remove submodule 后，理论上已经找不到了。
         try:
             self._vfs.rmtree(module_to_remove.path)
         except Exception as e:

@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, TypeVar
 from ..protocol.module import Module, ModuleOrder, Project, ModuleTagging
 from ..protocol.vfs import VFS
 from .module_config import YamlModuleConfig
-from .order import YamlOrder
+from .module_item_order import YamlOrder
 from .module_tag import FileBasedModuleTags
 
 #if TYPE_CHECKING:
@@ -113,12 +113,8 @@ class BaseModule(Module):
     def order(self) -> ModuleOrder:
         """Get the module's ordering interface."""
         if self._order is None:
-            self._order = YamlOrder(self._path, self._vfs)
-            # Set the prefix from config if available
-            if hasattr(self._order, 'set_prefix') and hasattr(self, 'config'):
-                prefix = self.config.settings.get('prefix', '')
-                if prefix is not None:
-                    self._order.set_prefix(prefix)
+            self._order = YamlOrder(self)
+            # Prefix is now set in YamlOrder's constructor
         return self._order
     
     def _ensure_initialized(self) -> None:
@@ -131,13 +127,9 @@ class BaseModule(Module):
             self._config = YamlModuleConfig.load(self._path, self._vfs)
             
             # Initialize order
-            self._order = YamlOrder(self._path, self._vfs)
+            self._order = YamlOrder(self)
             
-            # Set the prefix from config if available
-            if hasattr(self._order, 'set_prefix') and hasattr(self, 'config'):
-                prefix = self.config.settings.get('prefix', '')
-                if prefix is not None:
-                    self._order.set_prefix(prefix)
+            # Prefix is now set in YamlOrder's constructor
   
             # Load submodules
             self._load_submodules()
@@ -247,8 +239,22 @@ class BaseModule(Module):
             # Always use the module's prefix, not the one from settings
             settings['prefix'] = prefix
             
-        from .document_item import DocumentItem
-        return DocumentItem(id=id, prefix=prefix, settings=settings)
+        from .module_item import FileDocumentItem
+        return FileDocumentItem(id, prefix, settings=settings)
 
 class YamlModule(BaseModule):
-    pass  # 作为别名
+    """YAML-based implementation of the Module protocol."""
+    
+    def new_item(self, default_content: str = '', *, editor_mode: bool = False):
+        """Create a new document item in this module.
+        
+        This is a placeholder implementation that returns None.
+        
+        Args:
+            default_content: Not used in this implementation.
+            editor_mode: Not used in this implementation.
+            
+        Returns:
+            None as this is just a placeholder implementation.
+        """
+        return None
