@@ -16,13 +16,13 @@
 """Default implementation of the Module protocol."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Type, TypeVar, cast, TYPE_CHECKING
+from typing import Dict, List, Optional, TypeVar
 
-from ..protocol.module import Module, ModuleOrder, Project
+from ..protocol.module import Module, ModuleOrder, Project, ModuleTagging
 from ..protocol.vfs import VFS
 from .module_config import YamlModuleConfig
 from .order import YamlOrder
-from .module_tag import ModuleTagging
+from .module_tag import FileBasedModuleTags
 
 #if TYPE_CHECKING:
 #    from .project import _YamlProject # Avoid circular imports
@@ -88,9 +88,18 @@ class BaseModule(Module):
         """Get the project's global tagging interface.
         
         The tags are managed at the project level and are available to all modules.
+        
+        Returns:
+            The module's tagging interface.
+            
+        Raises:
+            RuntimeError: If the module is not associated with a project.
         """
+        if self._project is None:
+            raise RuntimeError("Cannot access tags: module is not associated with a project")
+            
         if self._tagging is None:
-            self._tagging = ModuleTagging(self._path, self._vfs)
+            self._tagging = FileBasedModuleTags(self._project, self._path, self._vfs)
         return self._tagging
 
     @property

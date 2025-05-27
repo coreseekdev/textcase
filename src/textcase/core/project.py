@@ -43,8 +43,49 @@ class _YamlProject(YamlModule, Project, ProjectTags):
         return cast(YamlProjectConfig, self._config)
         
     def get_tags(self, prefix: str) -> List[str]:
-        """Get the project's global tagging interface."""
-        return []
+        """Get all available tags for the specified prefix.
+        
+        This collects tags from the module matching the prefix and all its parent modules
+        up to the project root, then returns a deduplicated list of all tags.
+        
+        Args:
+            prefix: The prefix to get tags for.
+            
+        Returns:
+            A sorted list of unique tag names that can be used with the specified prefix.
+        """
+        # Start with tags from the project config
+        all_tags = set(self.config.tags.keys())
+        
+        # If no prefix is provided, return all project-level tags
+        if not prefix:
+            return sorted(all_tags)
+            
+        # Find the module info for the given prefix
+        module_info = self.config.get_submodule(prefix)
+        if module_info is None:
+            return sorted(all_tags)
+            
+        # Start with the current module's tags
+        current_prefix = prefix
+        while True:
+            # Get the module info for current prefix
+            current_info = self.config.get_submodule(current_prefix)
+            if current_info is None:
+                break
+                
+            # Add tags from current module's config
+            module = self._submodules.get(current_prefix)
+            if module and hasattr(module, 'config') and hasattr(module.config, 'tags'):
+                all_tags.update(module.config.tags.keys())
+                
+            # Move to parent module
+            if not current_info.parent_prefix:
+                break
+                
+            current_prefix = current_info.parent_prefix
+                
+        return sorted(all_tags)
     
     def _load_submodules(self) -> None:
         """Load all submodules for this project."""

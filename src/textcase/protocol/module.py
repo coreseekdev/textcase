@@ -232,6 +232,7 @@ class CaseItem(Protocol):
         ...
 
 
+@runtime_checkable
 class DocumentCaseItem(CaseItem, Protocol):
     """Protocol for a document case item.
     

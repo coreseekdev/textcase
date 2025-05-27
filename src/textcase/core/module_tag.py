@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, cast
 import yaml
 
-from ..protocol.module import CaseItem, DocumentCaseItem, ModuleTagging
+from ..protocol.module import CaseItem, DocumentCaseItem, ModuleTagging, Project
 from ..protocol.vfs import VFS
 
 
@@ -30,18 +30,19 @@ class FileBasedModuleTags(ModuleTagging):
     Each line in the file represents an item key that has that tag.
     """
     
-    def __init__(self, path: Path, vfs: VFS, parent_tags: Optional['FileBasedModuleTags'] = None):
+    def __init__(self, project: Project, path: Path, vfs: VFS):
         self._cache: Optional[Dict[str, Set[str]]] = None
         """Initialize with module path, VFS, and optional parent tags.
         
         Args:
+            project: The project to which this module belongs.
             path: The path to the module directory.
             vfs: The virtual filesystem to use for I/O operations.
-            parent_tags: Optional parent module's tags for hierarchical tag lookup.
         """
+        # 隐含，必须绑定 project 才能访问 tag 机制
+        self._project = project
         self.path = path
         self._vfs = vfs
-        self.parent_tags = parent_tags
         self._ensure_tag_dir()
     
     def _ensure_tag_dir(self) -> None:
@@ -84,6 +85,8 @@ class FileBasedModuleTags(ModuleTagging):
             ValueError: If the tag is not in the available tags list.
         """
         # Check if tag is in available tags
+        # 注意，此处的实现并没有限制 item 是 当前模块的。
+        # 如果调用时不注意，是可能存在 某个模块的 item 的 tag 关系记录到其他模块了
         available_tags = self.get_tags(doc_item.prefix)
         if tag not in available_tags:
             raise ValueError(f"Tag '{tag}' is not in the available tags list")
@@ -144,11 +147,6 @@ class FileBasedModuleTags(ModuleTagging):
                     tags.append(tag)
                     
         return sorted(tags)  
-
-    def invalidate_cache(self) -> None:
-        """Invalidate any cached tag data."""
-        # No caching implemented in this version
-        pass
     
     def _load_tags(self, path: Path, vfs: VFS) -> Set[str]:
         """Load all available tag names from the config file."""
@@ -161,25 +159,7 @@ class FileBasedModuleTags(ModuleTagging):
             config = yaml.safe_load(f) or {}
             
         return set(config.get('tags', {}).keys())
-    
-    def _get_all_tags(self, vfs: VFS) -> Dict[str, Set[str]]:
-        """Get all tags from this module and its parents recursively."""
-        if self._cache is not None:
-            return self._cache
-            
-        tags = self._load_tags(self.path, vfs)
-        
-        # Include parent tags if available
-        if self.parent_tags is not None:
-            parent_tags = self.parent_tags._get_all_tags(vfs)
-            for tag, items in parent_tags.items():
-                if tag in tags:
-                    tags[tag].update(items)
-                else:
-                    tags[tag] = set(items)
-        
-        return tags
-    
+
     def get_tags(self, prefix: Optional[str] = None) -> List[str]:
         """Get all available tags, optionally filtered by prefix.
         
@@ -189,15 +169,14 @@ class FileBasedModuleTags(ModuleTagging):
         Returns:
             A list of available tag names.
         """
+        if prefix and self._project:
+            return self._project.get_tags(prefix)
+        
+        
         if self._cache is None:
-            self._cache = self._get_all_tags(self._vfs)
-            
-        all_tags = set()
-        for tag, items in self._cache.items():
-            if prefix is None or any(item.startswith(f"{prefix}:") for item in items):
-                all_tags.add(tag)
-                
-        return sorted(all_tags)
+            self._cache = sorted(self._load_tags(self.path, self._vfs))
+        
+        return self._cache
     
     def invalidate_cache(self) -> None:
         """Invalidate the tag cache."""
