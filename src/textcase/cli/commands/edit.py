@@ -90,13 +90,17 @@ def edit(ctx: click.Context, doc_id: str):
     Edit a document using the system editor.
     
     The document will be created if it doesn't exist, but only if changes are made.
-    """
-    # Get the base directory from context or use current directory
-    base_dir = Path.cwd()
-    if ctx.obj and 'project' in ctx.obj:
-        base_dir = ctx.obj['project'].path
     
+    Requires an existing project. The project must be initialized with a .textcase.yml file.
+    """
+    # Get the project from context (ensured by the CLI)
+    project = ctx.obj['project']
+    base_dir = project.path
+    
+    # Get the document path and ensure its parent directory exists
     doc_path = get_document_path(doc_id, base_dir)
+    doc_path.parent.mkdir(parents=True, exist_ok=True)
+    
     temp_dir = Path(tempfile.mkdtemp(prefix='textcase_edit_'))
     
     try:
@@ -118,6 +122,13 @@ def edit(ctx: click.Context, doc_id: str):
             # If this was a new file, print a message
             if not doc_path.exists():
                 click.echo(f"Created new document: {doc_path}")
+                
+                # Add the new document to the project's order if it's not already there
+                try:
+                    if hasattr(project, 'order') and hasattr(project.order, 'add_item'):
+                        project.order.add_item(doc_path.name)
+                except Exception as e:
+                    click.echo(f"Warning: Could not add document to project order: {e}", err=True)
         else:
             if doc_path.exists():
                 click.echo("No changes made.")

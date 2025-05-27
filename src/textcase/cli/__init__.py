@@ -35,36 +35,60 @@ from .commands.clear import clear
 from .commands.archive import archive
 
 @click.group(invoke_without_command=True)
-@click.option('--project-path', '-p', type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option('--project-path', '-p', type=click.Path(exists=True, file_okay=False, path_type=Path), 
+              help='Path to an existing project directory')
 @click.pass_context
 def cli(ctx: click.Context, project_path: Optional[Path] = None):
-    """TextCase - A full-stack text-based CASE tool."""
+    """TextCase - A full-stack text-based CASE tool.
+    
+    This tool requires an existing project with a .textcase.yml file.
+    Use the 'create' command to initialize a new project.
+    """
     # Ensure that ctx.obj exists and is a dict
     ctx.ensure_object(dict)
     
-    # Get project path
-    project_path = project_path or Path.cwd()
+    # Get project path (default to current directory if not specified)
+    project_path = (project_path or Path.cwd()).absolute()
+    config_file = project_path / '.textcase.yml'
+    
+    # Always ensure VFS is available for all commands
+    vfs = get_default_vfs()
+    ctx.obj['vfs'] = vfs
+    
+    # Special handling for create command - it can work without a valid project
+    if ctx.invoked_subcommand == 'create':
+        # For create command, only try to load project if it exists
+        if config_file.exists():
+            try:
+                project = create_project(project_path)
+                ctx.obj['project'] = project
+            except Exception as e:
+                # Just log the error but continue - create command will handle this
+                click.echo(f"Warning: Could not load existing project: {e}", err=True)
+        
+        # Always continue to the create command
+        return
+    
+    # For all other commands, require a valid project
+    if not config_file.exists():
+        click.echo(f"Error: No .textcase.yml found in {project_path}", err=True)
+        click.echo("\nTo create a new project, run:")
+        click.echo(f"  tse create {project_path}")
+        ctx.exit(1)
     
     try:
-        # Create or load project
+        # Load existing project
         project = create_project(project_path)
-        vfs = get_default_vfs()
         
-        # Initialize default settings if this is a new project
-        if not project_path.joinpath('.textcase.yml').exists():
-            project.config.settings.update({
-                'digits': 3,
-                'prefix': 'REQ',
-                'sep': '',
-                'default_tag': []
-            })
-            project.save()
+        # Verify the project has a valid config
+        if not hasattr(project, 'config') or not project.config:
+            click.echo(f"Error: Invalid project configuration in {project_path}", err=True)
+            ctx.exit(1)
             
         ctx.obj['project'] = project
-        ctx.obj['vfs'] = vfs
         
     except Exception as e:
-        click.echo(f"Error initializing project: {e}", err=True)
+        click.echo(f"Error loading project: {e}", err=True)
         ctx.exit(1)
     
     # If no command is provided, show help
