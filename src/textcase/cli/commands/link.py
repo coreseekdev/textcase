@@ -86,17 +86,19 @@ def get_document_path(doc_id: str, project, ctx) -> tuple[Path, Module, str]:
 @click.command()
 @click.argument('source')
 @click.argument('target')
+@click.option('-l', '--label', default='', help='Optional label for the link')
 @click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
 @click.pass_context
-def link(ctx: click.Context, source: str, target: str, verbose: bool):
+def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool):
     """Link two documents.
     
     Creates a link from the SOURCE document to the TARGET document.
     Both SOURCE and TARGET should be document IDs in the format PREFIX[ID].
     
     Examples:
-      textcase link TST1 REQ1     # Link TST001 to REQ001
-      textcase link TST001 REQ001 # Link TST001 to REQ001 directly
+      textcase link TST1 REQ1                # Link TST001 to REQ001 with no label
+      textcase link TST1 REQ1 -l "related"   # Link with a specific label
+      textcase link TST001 REQ001             # Link using full IDs
     """
     # Set verbose mode in context if not already set
     if verbose and 'verbose' not in ctx.obj:
@@ -146,8 +148,11 @@ def link(ctx: click.Context, source: str, target: str, verbose: bool):
     
     # Create the link
     try:
-        source_item.make_link(target_item)
-        click.echo(f"Linked item: {source_formatted_id} (@{source_path.parent}) -> {target_formatted_id} (@{target_path.parent})")
+        source_item.make_link(target_item, label)
+        link_info = f"{source_formatted_id} -> {target_formatted_id}"
+        if label:
+            link_info += f' ("{label}")'
+        click.echo(f"Linked: {link_info} ({source_path.parent} -> {target_path.parent})")
     except Exception as e:
         click.echo(f"Error creating link: {e}", err=True)
         ctx.exit(1)

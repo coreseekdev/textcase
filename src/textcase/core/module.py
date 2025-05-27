@@ -300,20 +300,12 @@ class YamlModule(BaseModule):
             # Set the path on the document item
             doc_item.path = doc_path
             
-            # Create the document with frontmatter
-            if hasattr(doc_item, 'create_new_document'):
-                title = f"{prefix}{sep}{next_id}"
-                doc_item.create_new_document(title=title)
+            # Add the item to the module's order
+            if hasattr(self.order, 'add_item'):
+                self.order.add_item(doc_item)
                 
-                # Add the item to the module's order
-                if hasattr(self.order, 'add_item'):
-                    self.order.add_item(doc_item)
-                    
-                # If editor mode is enabled, open the document in an editor
-                if editor_mode:
-                    # This would be implemented elsewhere
-                    pass
-                    
-                return doc_item
+            # Note: We don't create the file here - it will be created when needed
+            # (e.g., when the user edits it or creates a link to/from it)
+            return doc_item
                 
         return None

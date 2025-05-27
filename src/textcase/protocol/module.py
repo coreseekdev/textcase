@@ -225,6 +225,15 @@ class CaseItem(Protocol):
             True if the link was successfully created, False otherwise
         """
         ...
+        
+    @abstractmethod
+    def get_links(self) -> Dict[str, List[str]]:
+        """Get all links from this document.
+        
+        Returns:
+            A dictionary mapping target keys to lists of labels
+        """
+        ...
 
 @runtime_checkable
 class DocumentCaseItem(CaseItem, Protocol):
@@ -233,6 +242,26 @@ class DocumentCaseItem(CaseItem, Protocol):
     This extends CaseItem with document-specific functionality,
     such as creating links between documents.
     """
+    
+    def make_link(self, target: CaseItem, label: Optional[str] = None) -> bool:
+        """Create a link from this document to the target document.
+        
+        Args:
+            target: The target CaseItem to link to
+            label: Optional label for the link
+            
+        Returns:
+            True if the link was successfully created, False otherwise
+        """
+        ...
+        
+    def get_links(self) -> Dict[str, List[str]]:
+        """Get all links from this document.
+        
+        Returns:
+            A dictionary mapping target keys to lists of labels
+        """
+        ...
 
 
 class ModuleOrder(Protocol):

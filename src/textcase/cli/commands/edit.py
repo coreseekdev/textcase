@@ -348,8 +348,14 @@ def try_add_to_module_order(ctx, module, formatted_id, doc_path):
             if item_id.startswith(module.config.settings.get('sep', '')):
                 item_id = item_id[len(module.config.settings.get('sep', '')):]  
                 
-            # Create a CaseItem and add it to the order
-            case_item = CaseItemBase(id=item_id, prefix=module.prefix)
+            # Create a CaseItem using the factory function and add it to the order
+            from textcase.core.case_item import create_case_item
+            case_item = create_case_item(
+                prefix=module.prefix,
+                id=item_id,
+                settings=module.config.settings if hasattr(module, 'config') else {},
+                path=doc_path
+            )
             module.order.add_item(case_item)
             debug_echo(ctx, f"Added {formatted_id} to module order")
     except Exception as e:

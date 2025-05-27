@@ -103,6 +103,12 @@ class MarkdownItem(FileDocumentItem):
         """Create a link from this document to the target document.
         
         This method adds a link to the YAML frontmatter of the markdown file.
+        Links are stored in the format:
+        
+        links:
+          target_key:
+            - label1
+            - label2
         
         Args:
             target: The target CaseItem to link to
@@ -121,20 +127,30 @@ class MarkdownItem(FileDocumentItem):
         if not self._path.exists():
             raise FileNotFoundError(f"Document {self.key} not found at {self._path}")
         
-        # Use the provided label or default to the target's key
-        link_label = label or target.key
-        
         # Read the file with frontmatter
         post = frontmatter.load(self._path)
         
-        # Initialize links list if it doesn't exist
+        # Initialize links dictionary if it doesn't exist
         if 'links' not in post.metadata:
-            post.metadata['links'] = []
+            post.metadata['links'] = {}
         
-        # Add the new link if it doesn't already exist
-        link_data = {'target': target.key, 'label': link_label}
-        if link_data not in post.metadata['links']:
-            post.metadata['links'].append(link_data)
+        # Initialize the target's label list if it doesn't exist
+        if target.key not in post.metadata['links']:
+            post.metadata['links'][target.key] = []
+        
+        # If this is the first link to this target
+        if target.key not in post.metadata['links']:
+            # If no label is provided, store as empty list
+            if label is None or label == '':
+                post.metadata['links'][target.key] = []
+            else:
+                post.metadata['links'][target.key] = [label]
+        else:
+            # If we already have links to this target
+            if label is not None and label != '':
+                # Add the label if it doesn't exist
+                if label not in post.metadata['links'][target.key]:
+                    post.metadata['links'][target.key].append(label)
             
             # Write the updated frontmatter and content back to the file
             frontmatter.dump(post, self._path)
@@ -142,11 +158,12 @@ class MarkdownItem(FileDocumentItem):
         
         return False  # Link already exists
     
-    def get_links(self) -> List[Tuple[str, str]]:
+    def get_links(self) -> Dict[str, List[str]]:
         """Get all links defined in this document.
         
         Returns:
-            A list of tuples containing (target_key, label)
+            A dictionary mapping target keys to lists of labels.
+            An empty list means the link exists but has no labels.
             
         Raises:
             ValueError: If the document path is not set
@@ -154,64 +171,30 @@ class MarkdownItem(FileDocumentItem):
         """
         if not self._path:
             raise ValueError(f"Document path not set for {self.key}")
-        
+            
         if not self._path.exists():
             raise FileNotFoundError(f"Document {self.key} not found at {self._path}")
-        
-        links = []
-        
-        # Read the file with frontmatter
-        post = frontmatter.load(self._path)
-        
-        # Extract links from frontmatter
-        if 'links' in post.metadata and isinstance(post.metadata['links'], list):
-            for link_data in post.metadata['links']:
-                if isinstance(link_data, dict) and 'target' in link_data:
-                    target_key = link_data['target']
-                    label = link_data.get('label', target_key)
-                    links.append((target_key, label))
-        
-        # For backward compatibility, also check for old-style links in the content
-        for line in post.content.splitlines():
-            if line.startswith("LINK: "):
-                target_key = line[6:].strip()  # Remove "LINK: " prefix
-                # Add only if not already in the list
-                if not any(target == target_key for target, _ in links):
-                    links.append((target_key, target_key))
-                
-        return links
-
-    def create_new_document(self, title: Optional[str] = None) -> bool:
-        """Create a new markdown document with YAML frontmatter.
-        
-        Args:
-            title: Optional title for the document, defaults to the item's key
             
-        Returns:
-            True if the document was created, False otherwise
+        try:
+            # Read the file with frontmatter
+            post = frontmatter.load(self._path)
             
-        Raises:
-            ValueError: If the document path is not set
-        """
-        if not self._path:
-            raise ValueError(f"Document path not set for {self.key}")
-        
-        # Don't overwrite existing files
-        if self._path.exists():
-            return False
-        
-        # Ensure parent directory exists
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Create document with frontmatter
-        post = frontmatter.Post(
-            f"# {title or self.key}\n\n",  # Initial content with title
-            links=[],  # Empty links list
-            id=self.id,
-            prefix=self.prefix
-        )
-        
-        # Write to file
-        frontmatter.dump(post, self._path)
-        return True
-
+            # Return the links dictionary or empty dict if not found
+            links = post.metadata.get('links', {})
+            
+            # Convert all values to lists and handle empty lists properly
+            result = {}
+            for target, labels in links.items():
+                if isinstance(labels, list):
+                    # Filter out any empty strings if they exist
+                    result[target] = [label for label in labels if label]
+                else:
+                    # Convert single value to list
+                    result[target] = [labels] if labels else []
+            
+            return result
+        except Exception as e:
+            # If there's any error reading the file or parsing frontmatter,
+            # return an empty dict
+            print(f"Error reading links from {self._path}: {e}")
+            return {}
