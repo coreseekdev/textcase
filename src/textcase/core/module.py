@@ -251,4 +251,32 @@ class BaseModule(Module):
         return DocumentItem(id=id, prefix=prefix, settings=settings)
 
 class YamlModule(BaseModule):
-    pass  # 作为别名
+    """YAML-based implementation of the Module protocol."""
+    
+    def new_item(self, default_content: str = '', *, editor_mode: bool = False):
+        """Create a new document item in this module.
+        
+        This is a placeholder implementation that returns None.
+        
+        Args:
+            default_content: Not used in this implementation.
+            editor_mode: Not used in this implementation.
+            
+        Returns:
+            None as this is just a placeholder implementation.
+        """
+        return None
+        
+    def new_item_n(self, n: int = 1, default_content: str = ''):
+        """Create multiple new document items in this module.
+        
+        This is a placeholder implementation that returns an empty list.
+        
+        Args:
+            n: Number of items to create. Not used in this implementation.
+            default_content: Default content for the new documents. Not used.
+            
+        Returns:
+            An empty list as this is just a placeholder implementation.
+        """
+        return []
