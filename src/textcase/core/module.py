@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, TypeVar
 from ..protocol.module import Module, ModuleOrder, Project, ModuleTagging
 from ..protocol.vfs import VFS
 from .module_config import YamlModuleConfig
-from .order import YamlOrder
+from .module_item_order import YamlOrder
 from .module_tag import FileBasedModuleTags
 
 #if TYPE_CHECKING:
@@ -247,7 +247,7 @@ class BaseModule(Module):
             # Always use the module's prefix, not the one from settings
             settings['prefix'] = prefix
             
-        from .document_item import DocumentItem
+        from .module_item import DocumentItem
         return DocumentItem(id=id, prefix=prefix, settings=settings)
 
 class YamlModule(BaseModule):
