@@ -18,11 +18,12 @@
 import os
 import yaml
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, cast
 
 from ..protocol.vfs import VFS
+from ..protocol.module import CaseItem, ModuleOrder
 
-class YamlOrder:
+class YamlOrder(ModuleOrder):
     """Order implementation using YAML files.
     
     If index.yml exists, it will be used to determine the order of files.
@@ -31,158 +32,174 @@ class YamlOrder:
     """
     
     def __init__(self, path: Path, vfs: VFS):
-        """Initialize with module path and VFS."""
+        """Initialize with module path and VFS.
+        
+        Args:
+            path: The base path for this order.
+            vfs: The virtual filesystem to use for operations.
+        """
         self.path = path
         self.vfs = vfs
         self._index_file = path / 'index.yml'
-        self._items: Optional[List[Path]] = None
+        self._items: Optional[List[CaseItem]] = None
         self._prefix: str = ''  # Will be set when config is loaded
+        self._case_item_cache: Dict[str, CaseItem] = {}  # Cache for CaseItem objects
     
-    def _get_file_creation_time(self, path: Path) -> float:
-        """Get the creation time of a file."""
+    def _get_file_creation_time(self, item: CaseItem) -> float:
+        """Get the creation time of a file.
+        
+        Args:
+            item: The CaseItem to get the creation time for.
+                
+        Returns:
+            The creation time as a float, or infinity if not available.
+        """
         try:
-            stat = self.vfs.stat(path)
+            # Get the filename from the CaseItem
+            filename = f"{item.key}.md"  # Assuming .md extension, adjust if needed
+            stat = self.vfs.stat(self.path / filename)
             return stat.st_ctime
         except Exception:
             return float('inf')
     
-    def _get_files_sorted_by_creation(self) -> List[Path]:
-        """Get files in the directory sorted by creation time."""
-        if not self.vfs.exists(self.path) or not self.vfs.isdir(self.path):
-            return []
-            
-        # Get all files that start with the prefix and are not hidden
-        files = []
-        try:
-            for entry in self.vfs.listdir(self.path):
-                # Get the entry name as string
-                if hasattr(entry, 'name'):  # FileStat object
-                    entry_name = entry.name
-                else:  # String path or other
-                    entry_name = str(entry)
-                
-                # Skip hidden files
-                if not isinstance(entry_name, str) or entry_name.startswith('.'):
-                    continue
-                    
-                # Build the full path
-                entry_path = self.path / entry_name
-                
-                # Skip directories and files that don't match the prefix
-                if (self.vfs.isfile(entry_path) and 
-                    (not self._prefix or entry_name.startswith(str(self._prefix)))):
-                    files.append(Path(entry_name))
-            
-            # Sort by creation time (oldest first)
-            files.sort(key=lambda f: self._get_file_creation_time(self.path / f))
-        except Exception as e:
-            print(f"Warning: Failed to list directory {self.path}: {e}")
-            return []
-            
-        return files
-    
-    def _load_items(self) -> List[Path]:
-        """Load items from the index file or sort by creation time.
+    def _get_files_sorted_by_creation(self) -> List[CaseItem]:
+        """Get files in the directory sorted by creation time.
         
-        The index file format is compatible with Doorstop's format:
-        ```yaml
-                
-        # Initial document version
-        initial: 1.0
-        
-        # Outline defines the hierarchy of items
-        outline:
-            - REQ001:  # Item text can be added as a comment
-            - REQ002:  # Another item
-                - REQ003:  # Child item (indented under REQ002)
-            - NEW:  # This will create a new item
+        Returns:
+            List of CaseItem objects sorted by creation time.
         """
+        try:
+            # Get all files in the directory
+            files = []
+            for entry in self.vfs.scandir(self.path):
+                if self.vfs.isfile(entry) and entry.name.startswith(self._prefix):
+                    files.append(entry)
+            
+            # Create CaseItem objects for all files
+            case_items = [self._create_case_item(Path(f.name)) for f in files]
+            
+            # Sort by creation time
+            return sorted(case_items, key=self._get_file_creation_time)
+        except Exception as e:
+            print(f"Error getting files sorted by creation time: {e}")
+            return []
+    
+    def _create_case_item(self, path: Path) -> CaseItem:
+        """Create a CaseItem from a Path.
+        
+        Args:
+            path: The path to create a CaseItem for.
+                
+        Returns:
+            A CaseItem representing the path.
+        """
+        # Use the filename without extension as the ID
+        item_id = path.stem
+        if item_id in self._case_item_cache:
+            return self._case_item_cache[item_id]
+            
+        # Create a simple CaseItem implementation
+        class SimpleCaseItem(CaseItem):
+            def __init__(self, _id: str, _path: Path):
+                self._id = _id
+                self._path = _path
+                
+            @property
+            def prefix(self) -> str:
+                return self._path.parent.name
+                
+            @property
+            def id(self) -> str:
+                return self._id
+                
+            @property
+            def key(self) -> str:
+                return f"{self.prefix}:{self._id}"
+                
+            def __str__(self) -> str:
+                return self.key
+                
+            def __eq__(self, other: object) -> bool:
+                if not isinstance(other, (SimpleCaseItem, str)):
+                    return False
+                return str(self) == str(other)
+                
+            def __hash__(self) -> int:
+                return hash(str(self))
+        
+        case_item = SimpleCaseItem(item_id, path)
+        self._case_item_cache[item_id] = case_item
+        return case_item
+        
+    def _load_items(self) -> List[CaseItem]:
+        """Load items from the index file or sort by creation time."""
         if self._items is not None:
             return self._items
             
-        # Get all existing files that match our criteria
-        existing_files = set()
-        if self.vfs.exists(self.path) and self.vfs.isdir(self.path):
-            try:
-                for entry in self.vfs.listdir(self.path):
-                    # Get the entry name as string
-                    if hasattr(entry, 'name'):  # FileStat object
-                        entry_name = entry.name
-                    else:  # String path or other
-                        entry_name = str(entry)
-                    
-                    # Skip hidden files
-                    if isinstance(entry_name, str) and entry_name.startswith('.'):
-                        continue
-                        
-                    # Build the full path
-                    entry_path = self.path / entry_name
-                    
-                    # Skip directories and non-matching prefixes
-                    if (self.vfs.isfile(entry_path) and 
-                        (not self._prefix or 
-                         (isinstance(entry_name, str) and 
-                          entry_name.startswith(str(self._prefix))))):
-                        existing_files.add(entry_name)
-            except Exception as e:
-                print(f"Warning: Failed to list directory {self.path}: {e}")
-        
-        # Try to load order from index.yml if it exists
         if self.vfs.exists(self._index_file):
             try:
                 with self.vfs.open(self._index_file, 'r') as f:
-                    data = yaml.safe_load(f) or {}
+                    data = yaml.safe_load(f)
+                    
+                if not isinstance(data, dict):
+                    return self._get_files_sorted_by_creation()
+                    
+                # Get the outline if it exists
+                outline = data.get('outline', [])
+                if not outline:
+                    return self._get_files_sorted_by_creation()
+                    
+                # Get all files that match the prefix
+                existing_files = {f.name for f in self.vfs.scandir(self.path) 
+                               if self.vfs.isfile(f) and f.name.startswith(self._prefix)}
                 
-                # If index.yml has an 'outline' key, use it (Doorstop compatibility)
-                if 'outline' in data and isinstance(data['outline'], list):
-                    ordered_items = self._parse_outline(data['outline'], existing_files)
-                    if ordered_items:
-                        self._items = ordered_items
-                        return self._items
-                # Fall back to simple 'order' key if 'outline' is not present
-                elif 'order' in data and isinstance(data['order'], list):
-                    ordered_items = []
-                    for item in data['order']:
-                        item_str = str(item)
-                        if (item_str in existing_files and 
-                            (not self._prefix or item_str.startswith(str(self._prefix)))):
-                            ordered_items.append(Path(item_str))
+                # Parse the outline
+                items = self._parse_outline(outline, existing_files)
+                
+                # If no items were found in the outline, fall back to file system order
+                if not items:
+                    return self._get_files_sorted_by_creation()
                     
-                    self._items = ordered_items
-                    return self._items
-                    
+                # Add any files that weren't in the outline
+                outline_files = {str(item) for item in items}
+                for filename in existing_files - outline_files:
+                    items.append(self._create_case_item(Path(filename)))
+                
+                self._items = items
+                return items
+                
             except Exception as e:
-                print(f"Warning: Failed to load order from {self._index_file}: {e}")
-        
-        # Fall back to creation time sorting if no valid order is found
-        self._items = self._get_files_sorted_by_creation()
+                print(f"Error loading index.yml: {e}")
+                return self._get_files_sorted_by_creation()
+        else:
+            return self._get_files_sorted_by_creation()
         return self._items
         
-    def _parse_outline(self, outline: list, existing_files: set) -> List[Path]:
-        """Parse a hierarchical outline structure into a flat list of paths.
+    def _parse_outline(self, outline: list, existing_files: set) -> List[CaseItem]:
+        """Parse a hierarchical outline structure into a flat list of CaseItems.
         
         Args:
             outline: The outline structure from the YAML file
             existing_files: Set of existing files to validate against
             
         Returns:
-            List of paths in the order they appear in the outline
+            List of CaseItems in the order they appear in the outline
         """
         result = []
         
         def process_item(item):
             if isinstance(item, dict):
                 for key, value in item.items():
-                    key_str = str(key)
-                    if key_str in existing_files:
-                        result.append(Path(key_str))
+                    if key in existing_files:
+                        result.append(self._create_case_item(Path(key)))
                     if isinstance(value, list):
                         for subitem in value:
                             process_item(subitem)
-            elif isinstance(item, str):
-                item_str = str(item)
-                if item_str in existing_files:
-                    result.append(Path(item_str))
+            elif isinstance(item, str) and item in existing_files:
+                result.append(self._create_case_item(Path(item)))
+            elif isinstance(item, list):
+                for subitem in item:
+                    process_item(subitem)
         
         for item in outline:
             process_item(item)
@@ -190,13 +207,10 @@ class YamlOrder:
         return result
     
     def _save_items(self) -> None:
-        """Save items to the index.yml file.
-        
-        The saved format is compatible with Doorstop's format for easier manual editing.
-        """
+        """Save the current order to the index file."""
         if self._items is None:
             return
-        
+            
         # Create a header with instructions
         header = """# THIS FILE IS USED TO DEFINE THE ORDER OF ITEMS
 # MANUALLY INDENT, DEDENT, & MOVE ITEMS TO THEIR DESIRED LEVEL
@@ -205,10 +219,10 @@ class YamlOrder:
 #######################################################################
 """
         
-        # Create the data structure
+        # Create the data structure with item keys
         data = {
             'initial': '1.0',  # Document version
-            'outline': [str(item) for item in self._items]  # Flat list for now
+            'outline': [str(item.key) for item in self._items]  # Use the item's key
         }
         
         # Save to index.yml with the header
@@ -222,70 +236,82 @@ class YamlOrder:
         # Invalidate cache to force reload with new prefix
         self._items = None
     
-    def get_ordered_items(self) -> List[Path]:
+    def get_ordered_items(self) -> List[CaseItem]:
         """Get items in their defined order.
         
         Returns:
-            List of paths to files that match the prefix, in the defined order.
+            A list of CaseItem objects in their defined order.
         """
         # Ensure we have the latest files that match the prefix
         self._items = None
         return self._load_items().copy()
     
-    def set_ordered_items(self, items: List[Path]) -> None:
+    def set_ordered_items(self, items: List[CaseItem]) -> None:
         """Set the order of items.
         
         Args:
-            items: List of paths to include in the order. Only files that start with
+            items: List of CaseItem objects to include in the order. Only files that start with
                   the current prefix will be included.
         """
-        # Filter items to only include those that match the current prefix
-        filtered_items = [
-            Path(item) for item in items 
-            if str(item).startswith(self._prefix) and 
-               self.vfs.exists(self.path / item) and 
-               self.vfs.isfile(self.path / item)
-        ]
+        # Convert items to Path objects for filtering
+        filtered_items = []
+        for item in items:
+            try:
+                path = Path(str(item))
+                if (path.name.startswith(self._prefix) and 
+                    self.vfs.exists(self.path / path) and 
+                    self.vfs.isfile(self.path / path)):
+                    filtered_items.append(self._create_case_item(path))
+            except (TypeError, ValueError):
+                continue
         
         # Keep any existing items that match the prefix but aren't in the new list
         current_items = {str(item) for item in self._load_items()}
         new_items = {str(item) for item in filtered_items}
         
         # Add any items that match the prefix but weren't in the new list
-        for item in current_items - new_items:
-            if item.startswith(self._prefix):
-                filtered_items.append(Path(item))
+        for item_str in current_items - new_items:
+            if item_str.startswith(self._prefix):
+                filtered_items.append(self._create_case_item(Path(item_str)))
         
         self._items = filtered_items
         self._save_items()
     
-    def add_item(self, item: Path) -> None:
+    def add_item(self, item: CaseItem) -> None:
         """Add an item to the order if it matches the prefix.
         
         Args:
-            item: The item to add. Will only be added if it starts with the prefix.
+            item: The CaseItem to add. Will only be added if it starts with the prefix.
         """
-        item = Path(item)
-        if not str(item).startswith(self._prefix):
+        try:
+            item_path = Path(str(item))
+            if not item_path.name.startswith(self._prefix):
+                return
+                
+            items = self._load_items()
+            if item not in items and self.vfs.exists(self.path / item_path) and self.vfs.isfile(self.path / item_path):
+                items.append(self._create_case_item(item_path))
+                self._items = items
+                self._save_items()
+        except (TypeError, ValueError):
             return
             
-        items = self._load_items()
-        if item not in items and self.vfs.exists(self.path / item) and self.vfs.isfile(self.path / item):
-            items.append(item)
-            self._items = items
-            self._save_items()
-            
     # Alias for backward compatibility
-    append_item = add_item
+    def append_item(self, item: CaseItem) -> None:
+        """Alias for add_item.
+        
+        Args:
+            item: The CaseItem to add.
+        """
+        self.add_item(item)
     
-    def remove_item(self, item: Path) -> None:
+    def remove_item(self, item: CaseItem) -> None:
         """Remove an item from the order.
         
         Args:
-            item: The item to remove.
+            item: The CaseItem to remove.
         """
         items = self._load_items()
-        item = Path(item)
         if item in items:
             items.remove(item)
             self._items = items

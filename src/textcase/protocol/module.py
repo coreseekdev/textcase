@@ -178,24 +178,6 @@ class ProjectConfig(ModuleConfig, Protocol):
         """
         ...
 
-class ModuleOrder(Protocol):
-    """Protocol for module ordering functionality."""
-    
-    @abstractmethod
-    def get_ordered_items(self) -> List[Path]:
-        """Get items in their defined order."""
-        ...
-        
-    @abstractmethod
-    def add_item(self, item: Path) -> None:
-        """Add an item to the ordering."""
-        ...
-        
-    @abstractmethod
-    def remove_item(self, item: Path) -> None:
-        """Remove an item from the ordering."""
-        ...
-
 class CaseItem(Protocol):
     """Protocol for a case item that can be tagged.
     
@@ -242,6 +224,36 @@ class DocumentCaseItem(CaseItem, Protocol):
     pass
 
 
+class ModuleOrder(Protocol):
+    """Protocol for module ordering functionality."""
+    
+    @abstractmethod
+    def get_ordered_items(self) -> List[CaseItem]:
+        """Get items in their defined order.
+        
+        Returns:
+            A list of CaseItem objects in their defined order.
+        """
+        ...
+        
+    @abstractmethod
+    def add_item(self, item: CaseItem) -> None:
+        """Add an item to the ordering.
+        
+        Args:
+            item: The CaseItem to add to the ordering.
+        """
+        ...
+        
+    @abstractmethod
+    def remove_item(self, item: CaseItem) -> None:
+        """Remove an item from the ordering.
+        
+        Args:
+            item: The CaseItem to remove from the ordering.
+        """
+        ...
+        
 class ModuleTagging(Protocol):
     """Protocol for module-level tag management.
     
@@ -370,7 +382,8 @@ class Module(Protocol):
     def save(self) -> None:
         """Save any changes to the module."""
         ...
-        
+    
+    @abstractmethod
     def get_document_item(self, id: str) -> DocumentCaseItem:
         """Get a DocumentCaseItem for the given ID using this module's prefix.
         
@@ -382,6 +395,37 @@ class Module(Protocol):
                 
         Returns:
             A DocumentCaseItem with the module's prefix and the given ID.
+        """
+        ...
+    
+    @abstractmethod
+    def new_item(self, default_content: str = '', *, editor_mode: bool = False) -> Optional[DocumentCaseItem]:
+        """Create a new document item in this module.
+        
+        Args:
+            default_content: Optional default content for the new document.
+            editor_mode: If True, opens an editor for the user to edit the content.
+                       If the user exits without saving, returns None.
+                       
+        Returns:
+            The newly created DocumentCaseItem, or None if creation was cancelled.
+        """
+        ...
+
+    @abstractmethod
+    def new_item_n(self, n: int = 1, default_content: str = '') -> list[DocumentCaseItem]:
+        """Create multiple new document items in this module.
+        
+        Args:
+            n: Number of items to create. Defaults to 1.
+            default_content: Default content for the new documents.
+            
+        Returns:
+            A list of created DocumentCaseItem objects. If editor_mode is True and user
+            cancels, the cancelled items will not be included in the list.
+            
+        Note:
+            When n=1, this method behaves similarly to new_item() but always returns a list.
         """
         ...
 
