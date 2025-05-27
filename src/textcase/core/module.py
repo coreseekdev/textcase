@@ -239,8 +239,20 @@ class BaseModule(Module):
             # Always use the module's prefix, not the one from settings
             settings['prefix'] = prefix
             
-        from .module_item import FileDocumentItem
-        return FileDocumentItem(id, prefix, settings=settings)
+        from .case_item import create_case_item
+        # Get the document path if it exists
+        doc_path = None
+        if self.path:
+            # Try to find the document file with the correct extension
+            # FIXME: 如果 case item 有其他扩展名，需要修改这个列表， 应该作为全局配置项
+            for ext in ['.md', '.markdown']:
+                potential_path = self.path / f"{prefix}{settings.get('sep', '-')}{id}{ext}"
+                if self._vfs.exists(potential_path):
+                    doc_path = potential_path
+                    break
+                    
+        # Create the case item using the factory method
+        return create_case_item(prefix, id, settings=settings, path=doc_path)
 
 class YamlModule(BaseModule):
     """YAML-based implementation of the Module protocol."""
@@ -248,13 +260,52 @@ class YamlModule(BaseModule):
     def new_item(self, default_content: str = '', *, editor_mode: bool = False):
         """Create a new document item in this module.
         
-        This is a placeholder implementation that returns None.
+        Creates a new document with the next available ID in this module.
         
         Args:
-            default_content: Not used in this implementation.
-            editor_mode: Not used in this implementation.
+            default_content: Optional default content for the document.
+            editor_mode: If True, opens an editor for the user to edit the content.
             
         Returns:
-            None as this is just a placeholder implementation.
+            The newly created DocumentCaseItem, or None if creation failed.
         """
+        # Get the module's prefix
+        prefix = self.prefix
+        if not prefix:
+            return None
+            
+        # Get the next available ID from the module's order
+        if not hasattr(self, 'order') or not hasattr(self.order, 'get_next_item_id'):
+            return None
+            
+        next_id = self.order.get_next_item_id()
+        if not next_id:
+            return None
+            
+        # Create a document item with the next ID
+        doc_item = self.get_document_item(next_id)
+        
+        # Set the path for the document
+        if hasattr(doc_item, 'path') and doc_item.path is None:
+            # Get settings for formatting
+            settings = {}
+            if self.config and hasattr(self.config, 'settings'):
+                settings = dict(self.config.settings)
+                
+            # Format the filename
+            sep = settings.get('sep', '-')
+            filename = f"{prefix}{sep}{next_id}.md"
+            doc_path = self.path / filename
+            
+            # Set the path on the document item
+            doc_item.path = doc_path
+            
+            # Add the item to the module's order
+            if hasattr(self.order, 'add_item'):
+                self.order.add_item(doc_item)
+                
+            # Note: We don't create the file here - it will be created when needed
+            # (e.g., when the user edits it or creates a link to/from it)
+            return doc_item
+                
         return None

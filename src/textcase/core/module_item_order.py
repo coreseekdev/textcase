@@ -111,14 +111,22 @@ class YamlOrder(ModuleOrder):
         item_id = path.stem
         if item_id in self._case_item_cache:
             return self._case_item_cache[item_id]
-            
-        from .module_item import CaseItemBase
         
-        # Create a CaseItem using CaseItemBase
-        case_item = CaseItemBase(
+        # Get the prefix from the parent directory name or path
+        prefix = path.parent.name.upper()
+        
+        # Get settings from the module if available
+        # settings = {}
+        # if hasattr(self, '_module') and hasattr(self._module, 'config') and hasattr(self._module.config, 'settings'):
+        settings = dict(self._module.config.settings)
+        
+        # Use the factory function to create the appropriate case item
+        from .case_item import create_case_item
+        case_item = create_case_item(
+            prefix=prefix,
             id=item_id,
-            prefix=path.parent.name,
-            _path=path  # Store the path as an attribute
+            settings=settings,
+            path=path
         )
         
         self._case_item_cache[item_id] = case_item

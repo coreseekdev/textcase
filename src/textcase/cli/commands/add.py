@@ -21,11 +21,10 @@ import time
 import threading
 import click
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 from textcase.protocol.module import Module
 from textcase.core.module import YamlModule
-from textcase.core.module_item import CaseItemBase
 from textcase.cli.utils import debug_echo
 from textcase.cli.commands.edit import edit_with_editor, get_editor
 
@@ -54,8 +53,14 @@ def monitor_file_changes(file_path: Path, module: Module, item_id: str, timeout:
                 if current_mtime > initial_mtime:
                     # File has been modified, add to order and exit
                     try:
-                        # Create a CaseItem and add it to the module order
-                        case_item = CaseItemBase(id=item_id, prefix=module.prefix)
+                        # Create a CaseItem using the factory function and add it to the module order
+                        from textcase.core.case_item import create_case_item
+                        case_item = create_case_item(
+                            prefix=module.prefix,
+                            id=item_id,
+                            settings=module.config.settings if hasattr(module, 'config') else {},
+                            path=file_path
+                        )
                         module.order.add_item(case_item)
                         return
                     except Exception as e:
@@ -197,7 +202,14 @@ def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None):
         if was_modified and file_path.exists():
             # File was modified and saved, add to module order
             try:
-                case_item = CaseItemBase(id=item_id, prefix=prefix)
+                # Create the case item using the factory function
+                from textcase.core.case_item import create_case_item
+                case_item = create_case_item(
+                    prefix=prefix,
+                    id=item_id,
+                    settings=module.config.settings if hasattr(module, 'config') else {},
+                    path=file_path
+                )
                 module.order.add_item(case_item)
                 module.order._save_items()  # Force save the order
                 click.echo(f"Added case item: {full_id}")
