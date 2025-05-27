@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, ClassVar, Protocol, runtime_checkable
+from pathlib import Path
 
 from ..protocol.module import CaseItem as CaseItemProtocol, DocumentCaseItem as DocumentCaseItemProtocol
 

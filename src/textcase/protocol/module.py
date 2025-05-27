@@ -213,15 +213,26 @@ class CaseItem(Protocol):
         """
         ...
 
+    @abstractmethod
+    def make_link(self, target: CaseItem, label: Optional[str] = None) -> bool:
+        """Create a link from this document to the target document.
+        
+        Args:
+            target: The target CaseItem to link to
+            label: Optional label for the link
+            
+        Returns:
+            True if the link was successfully created, False otherwise
+        """
+        ...
 
 @runtime_checkable
 class DocumentCaseItem(CaseItem, Protocol):
     """Protocol for a document case item.
     
-    This is a placeholder protocol that extends CaseItem for document-specific
-    functionality. Currently, it doesn't add any new methods or properties.
+    This extends CaseItem with document-specific functionality,
+    such as creating links between documents.
     """
-    pass
 
 
 class ModuleOrder(Protocol):

@@ -239,8 +239,20 @@ class BaseModule(Module):
             # Always use the module's prefix, not the one from settings
             settings['prefix'] = prefix
             
-        from .module_item import FileDocumentItem
-        return FileDocumentItem(id, prefix, settings=settings)
+        from .case_item import create_case_item
+        # Get the document path if it exists
+        doc_path = None
+        if self.path:
+            # Try to find the document file with the correct extension
+            # FIXME: 如果 case item 有其他扩展名，需要修改这个列表， 应该作为全局配置项
+            for ext in ['.md', '.markdown']:
+                potential_path = self.path / f"{prefix}{settings.get('sep', '-')}{id}{ext}"
+                if self._vfs.exists(potential_path):
+                    doc_path = potential_path
+                    break
+                    
+        # Create the case item using the factory method
+        return create_case_item(prefix, id, settings=settings, path=doc_path)
 
 class YamlModule(BaseModule):
     """YAML-based implementation of the Module protocol."""
