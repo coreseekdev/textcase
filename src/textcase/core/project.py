@@ -111,7 +111,7 @@ class _YamlProject(YamlModule, Project, ProjectTags):
             return self._submodules[info.prefix]
             
         # Create the module with self as the project
-        module = YamlModule(self, module_path, self._vfs)
+        module = YamlModule(module_path, self._vfs, self)
         
         # Add to submodules dictionary with both name and full prefix as keys
         module_name = module_path.name

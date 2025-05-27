@@ -207,7 +207,7 @@ def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None):
             # User canceled or didn't save, delete the file if it exists
             if file_path.exists():
                 try:
-                    module.vfs.remove(file_path)
+                    module._vfs.remove(file_path)
                     click.echo(f"Canceled: Item {full_id} not created.")
                 except Exception as e:
                     click.echo(f"Error removing temporary file: {e}", err=True)
@@ -219,7 +219,7 @@ def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None):
         # Clean up if file exists
         if file_path.exists():
             try:
-                module.vfs.remove(file_path)
+                module._vfs.remove(file_path)
             except Exception:
                 pass
         ctx.exit(1)
