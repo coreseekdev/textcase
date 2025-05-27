@@ -260,13 +260,60 @@ class YamlModule(BaseModule):
     def new_item(self, default_content: str = '', *, editor_mode: bool = False):
         """Create a new document item in this module.
         
-        This is a placeholder implementation that returns None.
+        Creates a new document with the next available ID in this module.
         
         Args:
-            default_content: Not used in this implementation.
-            editor_mode: Not used in this implementation.
+            default_content: Optional default content for the document.
+            editor_mode: If True, opens an editor for the user to edit the content.
             
         Returns:
-            None as this is just a placeholder implementation.
+            The newly created DocumentCaseItem, or None if creation failed.
         """
+        # Get the module's prefix
+        prefix = self.prefix
+        if not prefix:
+            return None
+            
+        # Get the next available ID from the module's order
+        if not hasattr(self, 'order') or not hasattr(self.order, 'get_next_item_id'):
+            return None
+            
+        next_id = self.order.get_next_item_id()
+        if not next_id:
+            return None
+            
+        # Create a document item with the next ID
+        doc_item = self.get_document_item(next_id)
+        
+        # Set the path for the document
+        if hasattr(doc_item, 'path') and doc_item.path is None:
+            # Get settings for formatting
+            settings = {}
+            if self.config and hasattr(self.config, 'settings'):
+                settings = dict(self.config.settings)
+                
+            # Format the filename
+            sep = settings.get('sep', '-')
+            filename = f"{prefix}{sep}{next_id}.md"
+            doc_path = self.path / filename
+            
+            # Set the path on the document item
+            doc_item.path = doc_path
+            
+            # Create the document with frontmatter
+            if hasattr(doc_item, 'create_new_document'):
+                title = f"{prefix}{sep}{next_id}"
+                doc_item.create_new_document(title=title)
+                
+                # Add the item to the module's order
+                if hasattr(self.order, 'add_item'):
+                    self.order.add_item(doc_item)
+                    
+                # If editor mode is enabled, open the document in an editor
+                if editor_mode:
+                    # This would be implemented elsewhere
+                    pass
+                    
+                return doc_item
+                
         return None
