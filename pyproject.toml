@@ -6,7 +6,7 @@ authors = ["coreseek.com <info@coreseek.com>"]
 readme = "README.md"
 packages = [{include = "textcase", from = "src"}]
 license = "Apache-2.0"
-include = ["textcase/py.typed"]
+include = ["textcase/py.typed", "src/textcase/data/templates/**/*"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -47,6 +47,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
+"textcase" = ["data/templates/**/*"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

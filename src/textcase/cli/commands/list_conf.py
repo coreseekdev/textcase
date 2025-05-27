@@ -21,8 +21,7 @@ from pathlib import Path
 from typing import Optional, List, Dict
 
 from textcase.protocol.module import Module
-from textcase.cli.utils import debug_echo
-from textcase.cli.utils.template_utils import list_available_templates
+from textcase.cli.utils import debug_echo, list_available_templates
 
 
 def list_configurations(project: Module, template_name: Optional[str] = None) -> Dict[str, List[str]]:

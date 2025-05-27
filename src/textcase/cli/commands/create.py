@@ -23,8 +23,7 @@ from typing import Optional, Dict, Any, List
 
 from textcase.core.module import YamlModule
 from textcase.protocol.module import Module
-from textcase.cli.utils import debug_echo
-from textcase.cli.utils.template_utils import copy_templates_to_project
+from textcase.cli.utils import debug_echo, copy_templates_to_project
 
 @click.command()
 @click.argument('prefix', type=str)
