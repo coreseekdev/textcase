@@ -113,12 +113,8 @@ class BaseModule(Module):
     def order(self) -> ModuleOrder:
         """Get the module's ordering interface."""
         if self._order is None:
-            self._order = YamlOrder(self._path, self._vfs)
-            # Set the prefix from config if available
-            if hasattr(self._order, 'set_prefix') and hasattr(self, 'config'):
-                prefix = self.config.settings.get('prefix', '')
-                if prefix is not None:
-                    self._order.set_prefix(prefix)
+            self._order = YamlOrder(self)
+            # Prefix is now set in YamlOrder's constructor
         return self._order
     
     def _ensure_initialized(self) -> None:
@@ -131,13 +127,9 @@ class BaseModule(Module):
             self._config = YamlModuleConfig.load(self._path, self._vfs)
             
             # Initialize order
-            self._order = YamlOrder(self._path, self._vfs)
+            self._order = YamlOrder(self)
             
-            # Set the prefix from config if available
-            if hasattr(self._order, 'set_prefix') and hasattr(self, 'config'):
-                prefix = self.config.settings.get('prefix', '')
-                if prefix is not None:
-                    self._order.set_prefix(prefix)
+            # Prefix is now set in YamlOrder's constructor
   
             # Load submodules
             self._load_submodules()

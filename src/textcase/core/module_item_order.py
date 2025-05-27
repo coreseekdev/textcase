@@ -16,12 +16,16 @@
 """Default implementation of ModuleOrder."""
 
 import os
+import re
 import yaml
 from pathlib import Path
-from typing import Dict, List, Optional, Set, cast
+from typing import Dict, List, Optional, Set, cast, TYPE_CHECKING
 
 from ..protocol.vfs import VFS
-from ..protocol.module import CaseItem, ModuleOrder
+from ..protocol.module import CaseItem, ModuleOrder, Module
+
+if TYPE_CHECKING:
+    from .module import YamlModule
 
 class YamlOrder(ModuleOrder):
     """Order implementation using YAML files.
@@ -36,19 +40,23 @@ class YamlOrder(ModuleOrder):
 
     """
     
-    def __init__(self, path: Path, vfs: VFS):
-        """Initialize with module path and VFS.
+    def __init__(self, module: 'Module'):
+        """Initialize with a module.
         
         Args:
-            path: The base path for this order.
-            vfs: The virtual filesystem to use for operations.
+            module: The module this order belongs to.
         """
-        self.path = path
-        self.vfs = vfs
-        self._index_file = path / 'index.yml'
+        self._module = module
+        self.path = module.path
+        self.vfs = module._vfs  # Accessing protected member, but this is within the same package
+        self._index_file = self.path / 'index.yml'
         self._items: Optional[List[CaseItem]] = None
-        self._prefix: str = ''  # Will be set when config is loaded
+        self._prefix: str = ''  # Will be set from module config
         self._case_item_cache: Dict[str, CaseItem] = {}  # Cache for CaseItem objects
+        
+        # Set prefix from module config
+        if hasattr(module, 'prefix') and module.prefix:
+            self.set_prefix(module.prefix)
     
     def _get_file_creation_time(self, item: CaseItem) -> float:
         """Get the creation time of a file.
@@ -299,3 +307,50 @@ class YamlOrder(ModuleOrder):
             items.remove(item)
             self._items = items
             self._save_items()
+            
+    def get_next_item_id(self, prefix: str) -> str:
+        """Get the next available item ID for the given prefix.
+        
+        The ID is a monotonically increasing sequence number based on existing files
+        in the directory with the pattern 'prefixNNN.md'. It will find the highest
+        existing sequence number and return the next one.
+        
+        Args:
+            prefix: The prefix to use for finding existing files (e.g., 'REQ')
+            
+        Returns:
+            The next available sequence number as a string, formatted according to
+            the module's settings (e.g., '001' if digits=3)
+        """
+        # Get module settings for formatting directly from the module
+        settings = self._module.config.settings
+        
+        # Get formatting parameters
+        digits = settings.get('digits', 3)  # Default to 3 digits
+        separator = settings.get('sep', '')  # Default to no separator
+        
+        # Find all files that match the pattern: prefix + separator + digits + .md
+        # Example: REQ001.md or REQ-001.md depending on separator
+        max_id = 0
+        pattern = f"^{re.escape(prefix)}{re.escape(separator)}(\\d+)\.md$"
+        
+        try:
+            # List all files in the directory
+            for entry in self.vfs.listdir_names(self.path):
+                match = re.match(pattern, entry)
+                if match:
+                    # Extract the numeric part and convert to int
+                    num_id = int(match.group(1))
+                    max_id = max(max_id, num_id)
+        except Exception as e:
+            print(f"Error finding next item ID: {e}")
+            # If there's an error, start from 1
+            max_id = 0
+        
+        # Increment to get the next ID
+        next_id = max_id + 1
+        
+        # Format with the specified number of digits
+        formatted_id = f"{next_id:0{digits}d}"
+        
+        return formatted_id

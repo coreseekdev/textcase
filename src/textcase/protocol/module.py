@@ -235,7 +235,7 @@ class ModuleOrder(Protocol):
             A list of CaseItem objects in their defined order.
         """
         ...
-        
+    
     @abstractmethod
     def add_item(self, item: CaseItem) -> None:
         """Add an item to the ordering.
@@ -244,13 +244,30 @@ class ModuleOrder(Protocol):
             item: The CaseItem to add to the ordering.
         """
         ...
-        
+    
     @abstractmethod
     def remove_item(self, item: CaseItem) -> None:
         """Remove an item from the ordering.
         
         Args:
             item: The CaseItem to remove from the ordering.
+        """
+        ...
+        
+    @abstractmethod
+    def get_next_item_id(self, prefix: str) -> str:
+        """Get the next available item ID for the given prefix.
+        
+        The ID is a monotonically increasing sequence number based on existing files
+        in the directory with the pattern 'prefixNNN.md'. It will find the highest
+        existing sequence number and return the next one.
+        
+        Args:
+            prefix: The prefix to use for finding existing files (e.g., 'REQ')
+            
+        Returns:
+            The next available sequence number as a string, formatted according to
+            the module's settings (e.g., '001' if digits=3)
         """
         ...
         
