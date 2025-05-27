@@ -1,0 +1,26 @@
+name: "{{ name | default('default_provider') }}"
+type: "{{ type | default('openai') }}"
+
+# API configuration
+api_key: "{{ api_key | default('') }}"
+api_base: "{{ api_base | default('https://api.openai.com/v1') }}"
+api_version: "{{ api_version | default('') }}"
+
+# Model configuration
+model: "{{ model | default('gpt-4') }}"
+temperature: {{ temperature | default(0.7) }}
+max_tokens: {{ max_tokens | default(1000) }}
+
+# Additional parameters
+{% if additional_params %}
+additional_params:
+{% for key, value in additional_params.items() %}
+  "{{ key }}": "{{ value }}"
+{% endfor %}
+{% else %}
+# Uncomment and modify as needed
+# additional_params:
+#   top_p: 0.95
+#   frequency_penalty: 0.0
+#   presence_penalty: 0.0
+{% endif %}

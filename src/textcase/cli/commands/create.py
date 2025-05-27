@@ -24,6 +24,7 @@ from typing import Optional, Dict, Any, List
 from textcase.core.module import YamlModule
 from textcase.protocol.module import Module
 from textcase.cli.utils import debug_echo
+from textcase.cli.utils.template_utils import copy_templates_to_project
 
 @click.command()
 @click.argument('prefix', type=str)
@@ -189,11 +190,20 @@ def create(ctx: click.Context, prefix: str, module_path: Path, parent: Optional[
             
             # Save the project to update configuration
             project.save()
+            
+            # If this is a root module (project), copy templates to .config/template
+            if not parent_prefix:
+                debug_echo(ctx, f"Copying templates to project")
+                copy_templates_to_project(module, ctx)
         else:
             # Just create the module without adding to a project - this is a root module
             click.echo(f"Created module '{prefix}' at {module_path}")
             # Save just the module configuration
             module.save()
+            
+            # Copy templates to .config/template
+            debug_echo(ctx, f"Copying templates to module")
+            copy_templates_to_project(module, ctx)
         
     except Exception as e:
         click.echo(f"Error creating module: {e}", err=True)

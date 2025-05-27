@@ -221,22 +221,35 @@ def get_document_path(doc_id: str, project, ctx) -> Tuple[Optional[Path], Option
 @click.pass_context
 def edit(ctx: click.Context, doc_id: str):
     """
-    Edit a document using the system editor.
+    Edit a document or configuration using the system editor.
     
-    The document will be created if it doesn't exist, but only if changes are made.
+    For documents, the document will be created if it doesn't exist, but only if changes are made.
+    
+    For configurations, use the format 'template_name:name' where template_name is a
+    template in the .config/template directory and name is the configuration name.
     
     Requires an existing project. The project must be initialized with a .textcase.yml file.
     
     Examples:
-      textcase edit REQ1     # Edit REQ001.md (with leading zeros based on module settings)
-      textcase edit REQ001   # Edit REQ001.md directly
-      textcase edit TST42    # Edit TST042.md in the TST module
+      textcase edit REQ1                # Edit REQ001.md (with leading zeros based on module settings)
+      textcase edit REQ001              # Edit REQ001.md directly
+      textcase edit TST42               # Edit TST042.md in the TST module
+      textcase edit prompt:my_prompt    # Edit the 'my_prompt' configuration using the 'prompt' template
     """
     # Get the project from context (ensured by the CLI)
     project = ctx.obj['project']
     if not project:
         click.echo("Error: No valid project found.", err=True)
         ctx.exit(1)
+        
+    # Check if this is a configuration command (contains ':' or starts with lowercase)
+    if ':' in doc_id or (doc_id and doc_id[0].islower()):
+        # Import the edit_conf module here to avoid circular imports
+        from textcase.cli.commands.edit_conf import edit_conf_command
+        
+        # Handle as a configuration command
+        success = edit_conf_command(ctx, doc_id)
+        ctx.exit(0 if success else 1)
     
     # Parse the document ID and get the file path
     doc_path, module, formatted_id = get_document_path(doc_id, project, ctx)

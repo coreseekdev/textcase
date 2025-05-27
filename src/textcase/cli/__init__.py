@@ -34,6 +34,7 @@ from .commands.unlink import unlink
 from .commands.clear import clear
 from .commands.archive import archive
 from .commands.add import add
+from .commands.list_conf import list_conf
 
 @click.group(invoke_without_command=True)
 @click.option('--project-path', '-p', type=click.Path(exists=True, file_okay=False, path_type=Path), 
@@ -107,6 +108,7 @@ cli.add_command(unlink)
 cli.add_command(clear)
 cli.add_command(archive)
 cli.add_command(add)
+cli.add_command(list_conf)
 
 def main():
     """Entry point for the CLI."""

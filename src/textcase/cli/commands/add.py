@@ -119,20 +119,33 @@ def validate_item_id(ctx: click.Context, module: Module, name: str) -> Tuple[boo
 @click.pass_context
 def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None):
     """
-    Add a new case item to a module.
+    Add a new case item to a module or a new configuration.
     
     MODULE_PREFIX is the prefix of the module to add the case item to (e.g., REQ).
+    
+    For configurations, use the format 'template_name:name' where template_name is a
+    template in the .config/template directory and name is the configuration name.
     
     Example usage:
       textcase add REQ                # Add a new case item with auto-generated ID
       textcase add -n FOOBAR REQ      # Add a new case item with custom string name
       textcase add -n 3 REQ           # Add a new case item with custom numeric ID
+      textcase add prompt:my_prompt   # Add a new configuration using the 'prompt' template
     """
     # Get project from context
     project = ctx.obj.get('project')
     if not project:
         click.echo("Error: No valid project found.", err=True)
         ctx.exit(1)
+        
+    # Check if this is a configuration command (contains ':' or starts with lowercase)
+    if ':' in module_prefix or (module_prefix and module_prefix[0].islower()):
+        # Import the add_conf module here to avoid circular imports
+        from textcase.cli.commands.add_conf import add_conf_command
+        
+        # Handle as a configuration command
+        success = add_conf_command(ctx, module_prefix)
+        ctx.exit(0 if success else 1)
     
     # Find the module with the given prefix
     module = None
