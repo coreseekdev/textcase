@@ -20,7 +20,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Protocol, TypeVar, runtime_checkable
+from typing import Any, Dict, List, NamedTuple, Optional, Protocol, Set, TypeVar, runtime_checkable
 import yaml
 
 from .vfs import VFS
@@ -31,9 +31,10 @@ __all__ = [
     'Module',
     'Project',
     'ModuleOrder',
-    'ModuleTags',
+    'ModuleTagging',
     'CaseItem',
     'DocumentCaseItem',
+    'ProjectTags',
 ]
 
 class ModuleConfig(Protocol):
@@ -240,11 +241,69 @@ class DocumentCaseItem(CaseItem, Protocol):
     pass
 
 
-class ProjectTags(Protocol):
-    """Protocol for project tagging functionality.
+class ModuleTagging(Protocol):
+    """Protocol for module-level tag management.
     
-    This protocol defines the interface for managing tags on case items within a project.
-    Tags can be used to organize and filter case items across the project.
+    This protocol defines the interface for managing tags on case items within a module.
+    It provides methods to add, remove, and query tags for case items.
+    """
+    
+    @abstractmethod
+    def add_tag(self, item: 'CaseItem', tag: str) -> None:
+        """Add a tag to a case item.
+        
+        Args:
+            item: The case item to tag.
+            tag: The tag to add.
+            
+        Raises:
+            ValueError: If the tag is not in the available tags list.
+        """
+        ...
+    
+    @abstractmethod
+    def remove_tag(self, item: 'CaseItem', tag: str) -> None:
+        """Remove a tag from a case item.
+        
+        Args:
+            item: The case item to untag.
+            tag: The tag to remove.
+        """
+        ...
+    
+    @abstractmethod
+    def get_item_tags(self, item: 'CaseItem') -> List[str]:
+        """Get all tags for a specific case item.
+        
+        Args:
+            item: The case item to get tags for.
+            
+        Returns:
+            A list of tag names associated with the item.
+        """
+        ...
+    
+    @abstractmethod
+    def get_tags(self) -> List[str]:
+        """Get all available tags."""
+        ...
+        
+    @abstractmethod
+    def invalidate_cache(self) -> None:
+        """Invalidate any cached tag data."""
+        ...
+    
+    @abstractmethod
+    def invalidate_cache(self) -> None:
+        """Invalidate any cached tag data."""
+        ...
+
+
+class ProjectTags(Protocol):
+    """Protocol for project-level tag management.
+    
+    This protocol defines the interface for managing tags at the project level.
+    It provides access to the tag management functionality for the entire project.
     """
     
     @abstractmethod
@@ -261,58 +320,6 @@ class ProjectTags(Protocol):
         """
         ...
         
-    @abstractmethod
-    def get_items_with_tag(self, tag: str, prefix: str) -> List[DocumentCaseItem]:
-        """Get all case items with the given tag and prefix.
-        
-        Args:
-            tag: The tag to filter case items by.
-            prefix: The prefix to filter case items by.
-                   
-        Returns:
-            A list of DocumentCaseItem objects that have the specified tag and prefix.
-            The list may include items from parent modules if they match the tag.
-        """
-        ...
-        
-    @abstractmethod
-    def add_tag(self, item: DocumentCaseItem, tag: str) -> None:
-        """Add a tag to a case item.
-        
-        Args:
-            item: The case item to tag.
-            tag: The tag to add to the item.
-            
-        Raises:
-            ValueError: If the tag is invalid or the item cannot be tagged.
-        """
-        ...
-        
-    @abstractmethod
-    def remove_tag(self, item: DocumentCaseItem, tag: str) -> None:
-        """Remove a tag from a case item.
-        
-        Args:
-            item: The case item to untag.
-            tag: The tag to remove from the item.
-            
-        Raises:
-            ValueError: If the tag doesn't exist on the item.
-        """
-        ...
-        
-    @abstractmethod
-    def get_item_tags(self, item: DocumentCaseItem) -> List[str]:
-        """Get all tags for a specific case item.
-        
-        Args:
-            item: The case item to get tags for.
-            
-        Returns:
-            A list of tag names associated with the item.
-        """
-        ...
-
 class Module(Protocol):
     """Protocol for a module in the project.
     
@@ -336,7 +343,16 @@ class Module(Protocol):
         It should be unique among siblings.
         """
         ...
+    
+    @property
+    @abstractmethod
+    def tags(self) -> ModuleTagging:
+        """Get the project's global tagging interface.
         
+        The tags are managed at the project level and are available to all modules.
+        """
+        ...
+    
     @property
     @abstractmethod
     def config(self) -> ModuleConfig:
@@ -353,6 +369,20 @@ class Module(Protocol):
     def save(self) -> None:
         """Save any changes to the module."""
         ...
+        
+    def get_document_item(self, id: str) -> DocumentCaseItem:
+        """Get a DocumentCaseItem for the given ID using this module's prefix.
+        
+        The returned DocumentCaseItem will use this module's prefix and the provided ID.
+        This does not require the item to exist on disk.
+        
+        Args:
+            id: The ID of the document item.
+                
+        Returns:
+            A DocumentCaseItem with the module's prefix and the given ID.
+        """
+        ...
 
 
 class Project(Module, Protocol):
@@ -361,15 +391,7 @@ class Project(Module, Protocol):
     A Project is a Module with additional capabilities for managing submodules and tags.
     It inherits all methods from Module and adds project-specific methods.
     """
-    @property
-    @abstractmethod
-    def tags(self) -> ModuleTags:
-        """Get the project's global tagging interface.
-        
-        The tags are managed at the project level and are available to all modules.
-        """
-        ...
-    
+
     @property
     @abstractmethod
     def config(self) -> ProjectConfig:

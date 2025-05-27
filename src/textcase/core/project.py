@@ -7,14 +7,15 @@ This module provides the implementation of the Project protocol.
 from pathlib import Path
 from typing import Dict, List, Optional, cast
 
-from ..protocol.module import Module, Project, SubmoduleInfo
+from ..protocol.module import Module, Project, ProjectTags, SubmoduleInfo
 from ..protocol.vfs import VFS
 from .module import YamlModule
 from .project_config import YamlProjectConfig
+# from .project_tag import TagManager
 from .vfs import get_default_vfs
 
 # Private implementation class
-class _YamlProject(YamlModule, Project):
+class _YamlProject(YamlModule, Project, ProjectTags):
     """YAML-based implementation of Project.
     
     This implementation provides project-level functionality including
@@ -30,21 +31,56 @@ class _YamlProject(YamlModule, Project):
         """
         self._vfs = vfs or get_default_vfs()
         # Initialize the parent class first
-        super().__init__(path, self._vfs)
+        super().__init__(path, self._vfs, self)
         # Then set up project-specific attributes
         self._config = YamlProjectConfig.load(path, self._vfs)
         self._submodules: Dict[str, Module] = {}
+        #self._tag_manager = TagManager(path, self._vfs)
         self._load_submodules()
     
     @property
     def config(self) -> YamlProjectConfig:
         return cast(YamlProjectConfig, self._config)
+        
+    def get_tags(self, prefix: str) -> List[str]:
+        """Get the project's global tagging interface."""
+        return []
     
     def _load_submodules(self) -> None:
         """Load all submodules for this project."""
         for info in self.config.get_all_submodules().values():
-            module_path = self.path / info.path
-            self._submodules[info.prefix] = YamlModule(module_path, self._vfs)
+            self._load_submodule(info)
+    
+    def _load_submodule(self, info: SubmoduleInfo) -> Module:
+        """Load a single submodule.
+        
+        Args:
+            info: The SubmoduleInfo containing the submodule's metadata.
+            
+        Returns:
+            The loaded module instance.
+            
+        Raises:
+            ValueError: If a module with the same prefix already exists.
+        """
+        module_path = self.path / info.path
+        
+        # Check if we already have this module loaded
+        if info.prefix in self._submodules:
+            return self._submodules[info.prefix]
+            
+        # Create the module with self as the project
+        module = YamlModule(self, module_path, self._vfs)
+        
+        # Add to submodules dictionary with both name and full prefix as keys
+        module_name = module_path.name
+        if module_name in self._submodules:
+            raise ValueError(f"A module named '{module_name}' already exists")
+            
+        self._submodules[module_name] = module
+        self._submodules[info.prefix] = module  # Also index by full prefix
+        
+        return module
     
     def get_submodules(self) -> List[Module]:
         return list(self._submodules.values())
@@ -115,6 +151,9 @@ class _YamlProject(YamlModule, Project):
         # Create module directory if it doesn't exist
         if not self._vfs.exists(module.path):
             self._vfs.makedirs(module.path, exist_ok=True)
+        
+        # Set the module's project
+        module._set_project(self)
             
         # Save the module's configuration
         module.save()

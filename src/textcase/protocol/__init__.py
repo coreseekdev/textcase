@@ -25,8 +25,7 @@ from .vfs import VFS, FileHandle, FileStat, FileSeek
 from .module import (
     Module,
     ModuleConfig,
-    ModuleOrder,
-    ModuleTags,
+    ModuleOrder
 )
 
 # For backward compatibility

@@ -16,13 +16,14 @@
 """File-based implementation of ModuleTags using files for storage."""
 
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set, cast
+import yaml
 
-from ..protocol.module import DocumentCaseItem
+from ..protocol.module import CaseItem, DocumentCaseItem, ModuleTagging
 from ..protocol.vfs import VFS
 
 
-class FileBasedModuleTags:
+class FileBasedModuleTags(ModuleTagging):
     """File-based implementation for module-level tag storage.
     
     Each tag is stored as a file in the module directory, where the filename is the tag name.
@@ -30,6 +31,7 @@ class FileBasedModuleTags:
     """
     
     def __init__(self, path: Path, vfs: VFS, parent_tags: Optional['FileBasedModuleTags'] = None):
+        self._cache: Optional[Dict[str, Set[str]]] = None
         """Initialize with module path, VFS, and optional parent tags.
         
         Args:
@@ -67,7 +69,11 @@ class FileBasedModuleTags:
             for item_key in sorted(item_keys):
                 f.write(f"{item_key}\n")
     
-    def add_tag(self, item: DocumentCaseItem, tag: str) -> None:
+    def add_tag(self, item: CaseItem, tag: str) -> None:
+        if not isinstance(item, DocumentCaseItem):
+            raise ValueError("Only DocumentCaseItem is supported")
+        
+        doc_item = cast(DocumentCaseItem, item)
         """Add a tag to a document item.
         
         Args:
@@ -78,16 +84,21 @@ class FileBasedModuleTags:
             ValueError: If the tag is not in the available tags list.
         """
         # Check if tag is in available tags
-        available_tags = self.get_tags(item.prefix)
+        available_tags = self.get_tags(doc_item.prefix)
         if tag not in available_tags:
             raise ValueError(f"Tag '{tag}' is not in the available tags list")
             
         tag_file = self._get_tag_file(tag)
         item_keys = self._read_tag_file(tag_file)
-        item_keys.add(item.key)
+        item_keys.add(doc_item.key)
         self._write_tag_file(tag_file, item_keys)
+        self.invalidate_cache()
     
-    def remove_tag(self, item: DocumentCaseItem, tag: str) -> None:
+    def remove_tag(self, item: CaseItem, tag: str) -> None:
+        if not isinstance(item, DocumentCaseItem):
+            raise ValueError("Only DocumentCaseItem is supported")
+            
+        doc_item = cast(DocumentCaseItem, item)
         """Remove a tag from a document item.
         
         Args:
@@ -97,15 +108,20 @@ class FileBasedModuleTags:
         tag_file = self._get_tag_file(tag)
         item_keys = self._read_tag_file(tag_file)
         
-        if item.key in item_keys:
-            item_keys.remove(item.key)
+        if doc_item.key in item_keys:
+            item_keys.remove(doc_item.key)
             if item_keys:
                 self._write_tag_file(tag_file, item_keys)
             else:
                 # Remove the tag file if it's empty
                 self._vfs.remove(tag_file)
+            self.invalidate_cache()
     
-    def get_item_tags(self, item: DocumentCaseItem) -> List[str]:
+    def get_item_tags(self, item: CaseItem) -> List[str]:
+        if not isinstance(item, DocumentCaseItem):
+            raise ValueError("Only DocumentCaseItem is supported")
+            
+        doc_item = cast(DocumentCaseItem, item)
         """Get all tags for a specific item.
         
         Only checks tag files that are in the available tags list.
@@ -114,7 +130,7 @@ class FileBasedModuleTags:
             return []
             
         # Get all available tags for this item's prefix
-        available_tags = self.get_tags(item.prefix)
+        available_tags = self.get_tags(doc_item.prefix)
         if not available_tags:
             return []
             
@@ -124,7 +140,7 @@ class FileBasedModuleTags:
             tag_file = self._get_tag_file(tag)
             if self._vfs.isfile(tag_file):
                 item_keys = self._read_tag_file(tag_file)
-                if item.key in item_keys:
+                if doc_item.key in item_keys:
                     tags.append(tag)
                     
         return sorted(tags)  
@@ -164,10 +180,24 @@ class FileBasedModuleTags:
         
         return tags
     
-    def get_tags(self) -> Dict[str, Set[str]]:
-        """Get all tags from this module and its parents recursively."""
-        self._cache = self._get_all_tags(self._vfs)
-        return self._cache
+    def get_tags(self, prefix: Optional[str] = None) -> List[str]:
+        """Get all available tags, optionally filtered by prefix.
+        
+        Args:
+            prefix: Optional prefix to filter tags by.
+            
+        Returns:
+            A list of available tag names.
+        """
+        if self._cache is None:
+            self._cache = self._get_all_tags(self._vfs)
+            
+        all_tags = set()
+        for tag, items in self._cache.items():
+            if prefix is None or any(item.startswith(f"{prefix}:") for item in items):
+                all_tags.add(tag)
+                
+        return sorted(all_tags)
     
     def invalidate_cache(self) -> None:
         """Invalidate the tag cache."""

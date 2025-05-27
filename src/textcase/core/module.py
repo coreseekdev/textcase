@@ -16,33 +16,56 @@
 """Default implementation of the Module protocol."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Type, TypeVar, cast
+from typing import Any, Dict, List, Optional, Set, Type, TypeVar, cast, TYPE_CHECKING
 
-from ..protocol.module import Module, ModuleOrder, ModuleTags
+from ..protocol.module import Module, ModuleOrder, Project
 from ..protocol.vfs import VFS
 from .module_config import YamlModuleConfig
 from .order import YamlOrder
-from .tags import FileBasedTags
+from .module_tag import ModuleTagging
+
+#if TYPE_CHECKING:
+#    from .project import _YamlProject # Avoid circular imports
 
 T = TypeVar('T', bound='BaseModule')
 
 class BaseModule(Module):
     """Base implementation of the Module protocol."""
     
-    def __init__(self, path: Path, vfs: VFS):
+    def __init__(self, path: Path, vfs: VFS, project: Optional['Project'] = None):
         """Initialize the module.
         
         Args:
+            project: The project this module belongs to. Can be set later using _set_project().
             path: The filesystem path of the module.
             vfs: The virtual filesystem to use for file operations.
+            
+        Note:
+            The project parameter is optional and can be set later using _set_project().
         """
+        self._project = project
         self._path = path
         self._vfs = vfs
         self._config: Optional[YamlModuleConfig] = None
         self._order: Optional[ModuleOrder] = None
-        self._tags: Optional[ModuleTags] = None
+        self._tagging: Optional[ModuleTagging] = None
         self._submodules: Dict[str, 'BaseModule'] = {}
         self._initialized = False
+    
+    def _set_project(self, project: 'Project') -> None:
+        """Set the project for this module.
+        
+        Args:
+            project: The project this module belongs to.
+            
+        Raises:
+            ValueError: If project is None or already set to a different project.
+        """
+        if project is None:
+            raise ValueError("Project cannot be None")
+        if self._project is not None and self._project is not project:
+            raise ValueError("Project is already set to a different instance")
+        self._project = project
     
     @property
     def path(self) -> Path:
@@ -60,6 +83,16 @@ class BaseModule(Module):
             return self.config.settings['prefix']
         return None
     
+    @property
+    def tags(self) -> ModuleTagging:
+        """Get the project's global tagging interface.
+        
+        The tags are managed at the project level and are available to all modules.
+        """
+        if self._tagging is None:
+            self._tagging = ModuleTagging(self._path, self._vfs)
+        return self._tagging
+
     @property
     def config(self) -> YamlModuleConfig:
         """Get the module's configuration."""
@@ -79,13 +112,6 @@ class BaseModule(Module):
                     self._order.set_prefix(prefix)
         return self._order
     
-    @property
-    def tags(self) -> ModuleTags:
-        """Get the module's tagging interface."""
-        if self._tags is None:
-            self._tags = FileBasedTags(self._path, self._vfs)
-        return self._tags
-    
     def _ensure_initialized(self) -> None:
         """Ensure the module is initialized."""
         if self._initialized:
@@ -95,7 +121,7 @@ class BaseModule(Module):
             # Load configuration
             self._config = YamlModuleConfig.load(self._path, self._vfs)
             
-            # Initialize order and tags
+            # Initialize order
             self._order = YamlOrder(self._path, self._vfs)
             
             # Set the prefix from config if available
@@ -103,8 +129,7 @@ class BaseModule(Module):
                 prefix = self.config.settings.get('prefix', '')
                 if prefix is not None:
                     self._order.set_prefix(prefix)
-            self._tags = FileBasedTags(self._path, self._vfs)
-            
+  
             # Load submodules
             self._load_submodules()
             
@@ -180,6 +205,28 @@ class BaseModule(Module):
         # Save all submodules
         for module in self._submodules.values():
             module.save()
+            
+    def get_document_item(self, id: str) -> 'DocumentItem':
+        """Get a DocumentCaseItem for the given ID using this module's prefix.
+        
+        The returned DocumentItem will use this module's prefix and the provided ID.
+        This does not require the item to exist on disk.
+        
+        Args:
+            id: The ID of the document item.
+                
+        Returns:
+            A DocumentItem with the module's prefix and the given ID.
+            
+        Raises:
+            ValueError: If the module doesn't have a prefix set.
+        """
+        prefix = self.prefix
+        if not prefix:
+            raise ValueError("Cannot create document item: module has no prefix")
+            
+        from .document_item import DocumentItem
+        return DocumentItem(prefix=prefix, id=id)
 
 class YamlModule(BaseModule):
     pass  # 作为别名

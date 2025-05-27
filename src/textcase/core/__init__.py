@@ -26,17 +26,13 @@ from ..protocol import (
     FileStat,
     Module,
     ModuleConfig,
-    ModuleOrder,
-    ModuleTags,
+    ModuleOrder
 )
 
-from .tags import FileBasedTags
 from .module import BaseModule
 
 __all__ = [
     # Core implementations
-    'BaseModule',
-    'FileBasedTags',
     'create_project',
     'get_default_vfs',
     
