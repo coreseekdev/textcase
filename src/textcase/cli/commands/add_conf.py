@@ -18,8 +18,10 @@
 import os
 import re
 import time
+import tempfile
 import click
 import jinja2
+import jinja2.meta
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 
@@ -53,34 +55,88 @@ def get_template_path(project: Module, template_name: str) -> Optional[Path]:
     return None
 
 
-def render_template(template_path: Path, context: Dict[str, Any]) -> str:
+class PreserveUndefined(jinja2.Undefined):
+    """A custom undefined handler that preserves the original variable syntax."""
+    def __str__(self):
+        # Return the original variable syntax when rendered as string
+        return f"{{{{ {self._undefined_name} }}}}"
+    
+    def __getattr__(self, name):
+        # Allow chaining of undefined attributes
+        return self
+    
+    __getitem__ = __getattr__
+    __call__ = __getattr__
+    __add__ = __getattr__
+    __radd__ = __getattr__
+
+
+def render_template(ctx: click.Context, template_path: Path, context: Dict[str, Any]) -> str:
     """
     Render a Jinja2 template with the given context.
+    
+    This function will automatically populate template variables from environment variables
+    if they are not provided in the context. Environment variables should be prefixed with
+    'TEMPLATE_' followed by the variable name in uppercase.
     
     Args:
         template_path: Path to the template file
         context: Dictionary of variables to use in rendering
         
     Returns:
-        Rendered template content
+        Rendered template content with unresolved variables preserved as-is
     """
-    # Create Jinja2 environment
+    debug_echo(ctx, "=== Starting template rendering ===")
+    debug_echo(ctx, f"Template path: {template_path}")
+    debug_echo(ctx, f"Template exists: {template_path.exists()}")
+    
+    # Read the template content first
+    try:
+        with open(template_path, 'r') as f:
+            template_content = f.read()
+        debug_echo(ctx, f"Template content (first 100 chars):\n{template_content[:100]}...")
+    except Exception as e:
+        debug_echo(ctx, f"Error reading template file: {e}", err=True)
+        return ""
+    
+    # Create Jinja2 environment with our custom undefined handler
     env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(template_path.parent),
-        undefined=jinja2.Undefined,  # Allow undefined variables
+        undefined=PreserveUndefined,  # Use our custom undefined handler
     )
     
-    # Load the template
-    template = env.get_template(template_path.name)
+    # Parse the template to find all variables
+    try:
+        ast = env.parse(template_content)
+        template_vars = jinja2.meta.find_undeclared_variables(ast)
+        debug_echo(ctx, f"Found template variables: {template_vars}")
+    except Exception as e:
+        debug_echo(ctx, f"Error parsing template: {e}", err=True)
+        return template_content
+    
+    # Create a copy of the context to avoid modifying the original
+    render_context = context.copy()
+    debug_echo(ctx, f"Initial context: {render_context}")
+    
+    # Populate variables from environment variables
+    for var in template_vars:
+        env_var = f"TEMPLATE_{var.upper()}"
+        if var not in render_context and env_var in os.environ:
+            render_context[var] = os.environ[env_var]
+            debug_echo(ctx, f"Set {var} from environment variable {env_var} = {os.environ[env_var]}")
+    
+    debug_echo(ctx, f"Final render context: {render_context}")
     
     # Render the template
     try:
-        content = template.render(**context)
+        template = env.from_string(template_content)
+        content = template.render(**render_context)
+        debug_echo(ctx, f"Rendered content (first 200 chars):\n{content[:200]}...")
+        debug_echo(ctx, "=== Template rendering completed successfully ===")
         return content
     except Exception as e:
-        # If rendering fails, return the raw template content
-        with open(template_path, 'r') as f:
-            return f.read()
+        debug_echo(ctx, f"Error rendering template: {e}", err=True)
+        debug_echo(ctx, "Returning original template content due to error")
+        return template_content
 
 
 def parse_config_id(config_id: str) -> Tuple[str, str]:
@@ -136,24 +192,61 @@ def add_configuration(ctx: click.Context, project: Module, template_name: str, c
     # Get global variables from project settings
     global_vars = project.config.settings.get('variables', {})
     
+    # Add environment variables to the context
+    for key, value in os.environ.items():
+        if key.startswith('TEMPLATE_'):
+            var_name = key[9:].lower()  # Remove 'TEMPLATE_' prefix and convert to lowercase
+            debug_echo(ctx, f"Adding environment variable to context: {var_name} = {value}")
+            global_vars[var_name] = value
+    
+    # Add default values for required variables if not provided
+    if 'name' not in global_vars:
+        global_vars['name'] = config_name
+    if 'description' not in global_vars:
+        global_vars['description'] = f"Configuration for {config_name}"
+    
+    debug_echo(ctx, f"Rendering template with context: {global_vars}")
+    
     # Render the template
-    content = render_template(template_path, global_vars)
+    content = render_template(ctx, template_path, global_vars)
     
-    # Write the initial content to the output file
-    with open(output_path, 'w') as f:
-        f.write(content)
-        
-    # Open the file in the editor
-    editor = get_editor()
-    modified, _ = edit_with_editor(output_path)
-    
-    if not modified:
-        # If the user didn't make any changes, delete the file
-        output_path.unlink()
-        click.echo("No changes made, configuration not created.")
+    if not content:
+        click.echo("Error: Failed to render template.", err=True)
         return False
+    
+    # Create a temporary file with the rendered content
+    with tempfile.NamedTemporaryFile(mode='w+', suffix=template_path.suffix, delete=False) as temp_file:
+        temp_file.write(content)
+        temp_path = temp_file.name
+    
+    try:
+        # Convert temp_path to a Path object for edit_with_editor
+        temp_path_obj = Path(temp_path)
         
-    click.echo(f"Created configuration: {template_name}:{config_name}")
+        # Open the temporary file in the editor
+        modified, _ = edit_with_editor(temp_path_obj)
+        
+        if not modified:
+            debug_echo(ctx, "No changes made, configuration not created.")
+            return False
+            
+        # Read the modified content
+        with open(temp_path, 'r') as f:
+            final_content = f.read()
+            
+        # Write the final content to the output file
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, 'w') as f:
+            f.write(final_content)
+            
+    finally:
+        # Clean up the temporary file
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        
+    debug_echo(ctx, f"Created configuration: {template_name}:{config_name}")
     return True
 
 
