@@ -1,12 +1,12 @@
 ---
 models:
 {% if models %}
-{% for model in models %}
+{% for model in models -%}
   - {{ model }}
 {% endfor %}
-{% else %}
+{% else -%}
   - deepseek-v3
-{% endif %}
+{% endif -%}
 context_window: {{ context_window | default(200000) }}
 max_output_tokens: {{ max_output_tokens | default(8192) }}
 reasoning: {{ reasoning | default(false) }}
@@ -14,32 +14,4 @@ use_temperature: {{ use_temperature | default(true) }}
 temperature: {{ temperature | default(0.7) }}
 ---
 
-# {{ agent_name | default("Agent") }}
-
-{% if personality %}
-## Personality
-
-{{ personality }}
-{% endif %}
-
-{% if capabilities %}
-## Capabilities
-
-{{ capabilities }}
-{% endif %}
-
-{% if instructions %}
-## Instructions
-
-{{ instructions }}
-{% endif %}
-
-{% if examples %}
-## Examples
-
-{{ examples }}
-{% endif %}
-
-{% if content %}
-{{ content }}
-{% endif %}
+You are a helpful AI assistant.
