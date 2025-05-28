@@ -1,0 +1,17 @@
+---
+models:
+{% if models %}
+{% for model in models -%}
+  - {{ model }}
+{% endfor %}
+{% else -%}
+  - deepseek-v3
+{% endif -%}
+context_window: {{ context_window | default(200000) }}
+max_output_tokens: {{ max_output_tokens | default(8192) }}
+reasoning: {{ reasoning | default(false) }}
+use_temperature: {{ use_temperature | default(true) }}
+temperature: {{ temperature | default(0.7) }}
+---
+
+You are a helpful AI assistant.

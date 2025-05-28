@@ -31,7 +31,6 @@ from .commands.create import create
 from .commands.edit import edit
 from .commands.link import link
 from .commands.clear import clear
-from .commands.archive import archive
 from .commands.add import add
 from .commands.tag import tag
 from .commands.list_conf import list_conf
@@ -106,7 +105,6 @@ cli.add_command(create)
 cli.add_command(edit)
 cli.add_command(link)
 cli.add_command(clear)
-cli.add_command(archive)
 cli.add_command(add)
 cli.add_command(tag)
 cli.add_command(list_conf)

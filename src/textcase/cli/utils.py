@@ -16,12 +16,13 @@
 """Utility functions for CLI commands."""
 
 import os
+import re
 import shutil
 import click
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict, Any, Union
 
-from textcase.protocol.module import Module
+from textcase.protocol.module import Module, DocumentCaseItem
 
 def debug_echo(ctx: click.Context, message: str) -> None:
     """Echo a debug message only if verbose mode is enabled.
@@ -32,6 +33,210 @@ def debug_echo(ctx: click.Context, message: str) -> None:
     """
     if ctx.obj.get('verbose', False):
         click.echo(f"Debug: {message}")
+
+
+def parse_document_id(doc_id: str, project, ctx = None) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """
+    Parse a document ID into its components.
+    
+    This function handles document IDs in various formats:
+    - PREFIX[ID] (e.g., REQ001, TST42)
+    - PREFIX[ID]:REGION (e.g., REQ001:meta, TST42:content)
+    
+    It uses a right-to-left matching approach to find the longest prefix
+    that matches an existing module.
+    
+    Args:
+        doc_id: The document ID to parse
+        project: The project to search for modules
+        ctx: Optional Click context for debug output
+        
+    Returns:
+        Tuple of (module_prefix, item_id, formatted_id, region) or (None, None, None, None) if not found
+        - module_prefix: The prefix of the module (e.g., 'REQ')
+        - item_id: The ID part without formatting (e.g., '1')
+        - formatted_id: The full formatted ID (e.g., 'REQ001')
+        - region: The region specifier if present (e.g., 'meta', 'content'), or None
+    """
+    if ctx:
+        debug_echo(ctx, f"Parsing document ID: {doc_id}")
+    
+    # Initialize return values
+    module_prefix = None
+    item_id = None
+    formatted_id = None
+    region = None
+    
+    # Store original doc_id for reference
+    original_doc_id = doc_id
+    
+    # Get all available modules
+    modules = [project] + project.get_submodules()
+    modules = [m for m in modules if hasattr(m, 'prefix') and m.prefix]
+    
+    # Sort modules by prefix length (longest first) to ensure we match the longest prefix
+    modules.sort(key=lambda m: len(m.prefix), reverse=True)
+    
+    if ctx:
+        debug_echo(ctx, f"Available modules: {[m.prefix for m in modules]}")
+    
+    # First try exact match with any module
+    for module in modules:
+        if doc_id.upper() == module.prefix:
+            # This is just the module prefix with no ID
+            if ctx:
+                debug_echo(ctx, f"Matched exact module prefix: {module.prefix}")
+            return module.prefix, "", module.prefix, region
+    
+    # Try to find the longest prefix that matches
+    for module in modules:
+        prefix = module.prefix
+        if doc_id.upper().startswith(prefix):
+            # Extract the ID part (everything after the prefix)
+            remaining = doc_id[len(prefix):]
+            
+            # Check if there's a separator
+            settings = module.config.settings
+            separator = settings.get('sep', '')
+            
+            # If there's a separator, make sure it's present
+            if separator and remaining.startswith(separator):
+                remaining = remaining[len(separator):]
+            
+            # Now check if there's a region specifier in the remaining part
+            raw_id = remaining
+            
+            if ':' in remaining:
+                parts = remaining.split(':', 1)
+                raw_id = parts[0]
+                region = parts[1] # 不能改大小写，因为 region 实际是定位到 document 的 path.
+                
+                if ctx:
+                    debug_echo(ctx, f"Found potential region specifier: {region} in remaining part: {remaining}")
+            
+            # Format the ID according to module settings
+            digits = settings.get('digits', 3)  # Default to 3 digits
+            
+            # Format numeric IDs with leading zeros based on digits setting
+            if raw_id.isdigit():
+                formatted_num = f"{int(raw_id):0{digits}d}"
+                formatted_id = f"{prefix}{separator}{formatted_num}"
+            else:
+                formatted_id = f"{prefix}{separator}{raw_id}"
+            
+            if ctx:
+                debug_echo(ctx, f"Matched module: {prefix}, raw_id: {raw_id}, formatted_id: {formatted_id}, region: {region}")
+            
+            # Process the region if it was found
+            # 不检查 region 的实际取值            
+            return prefix, raw_id, formatted_id, region
+    
+    # If we get here, no match was found
+    if ctx:
+        debug_echo(ctx, f"Could not match document ID to any module: {doc_id}")
+    
+    return module_prefix, item_id, formatted_id, region
+
+
+def get_document_item(doc_id: str, project, ctx = None) -> Tuple[Optional[DocumentCaseItem], Optional[str]]:
+    """
+    Get a document item from a document ID.
+    
+    Args:
+        doc_id: The document ID to parse
+        project: The project to search for modules
+        ctx: Optional Click context for debug output
+        
+    Returns:
+        Tuple of (case_item, region) or (None, None) if not found
+        - case_item: The document case item
+        - region: The region specifier if present (e.g., 'meta', 'content'), or None
+    """
+    # Parse the document ID
+    module_prefix, item_id, formatted_id, region = parse_document_id(doc_id, project, ctx)
+    
+    if not module_prefix or not formatted_id:
+        if ctx:
+            debug_echo(ctx, f"Could not parse document ID: {doc_id}")
+        return None, region
+    
+    # Find the module
+    target_module = None
+    if project.prefix == module_prefix:
+        target_module = project
+    else:
+        for submodule in project.get_submodules():
+            if hasattr(submodule, 'prefix') and submodule.prefix == module_prefix:
+                target_module = submodule
+                break
+    
+    if not target_module:
+        if ctx:
+            debug_echo(ctx, f"Could not find module for prefix: {module_prefix}")
+        return None, region
+    
+    # Get the document item
+    try:
+        # Use the raw ID without formatting to get the item
+        case_item = target_module.get_document_item(item_id)
+        
+        # Set the path if needed
+        if hasattr(case_item, 'path') and case_item.path is None:
+            doc_path = target_module.path / f"{formatted_id}.md"
+            case_item.path = doc_path
+        
+        if ctx:
+            debug_echo(ctx, f"Found document item: {case_item.key}")
+        
+        return case_item, region
+    except Exception as e:
+        if ctx:
+            debug_echo(ctx, f"Error getting document item: {e}")
+        return None, region
+
+
+def get_document_path(doc_id: str, project, ctx = None) -> Tuple[Optional[Path], Optional[Module], Optional[str], Optional[str]]:
+    """
+    Get the document path from a document ID.
+    
+    Args:
+        doc_id: The document ID in the format PREFIX[ID][:region]
+        project: The project to search in
+        ctx: Click context for debug output
+        
+    Returns:
+        A tuple of (document_path, module, formatted_id, region) or (None, None, None, None) if not found
+    """
+    # Parse the document ID
+    module_prefix, item_id, formatted_id, region = parse_document_id(doc_id, project, ctx)
+    
+    if not module_prefix or not formatted_id:
+        if ctx:
+            debug_echo(ctx, f"Could not parse document ID: {doc_id}")
+        return None, None, None, region
+    
+    # Find the module
+    target_module = None
+    if project.prefix == module_prefix:
+        target_module = project
+    else:
+        for submodule in project.get_submodules():
+            if hasattr(submodule, 'prefix') and submodule.prefix == module_prefix:
+                target_module = submodule
+                break
+    
+    if not target_module:
+        if ctx:
+            debug_echo(ctx, f"Could not find module for prefix: {module_prefix}")
+        return None, None, None, region
+    
+    # Create the file path
+    file_path = target_module.path / f"{formatted_id}.md"
+    
+    if ctx:
+        debug_echo(ctx, f"Resolved file path: {file_path}")
+    
+    return file_path, target_module, formatted_id, region
 
 
 def get_template_source_dir() -> Path:

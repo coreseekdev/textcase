@@ -1,0 +1,16 @@
+# {{ name }} Prompt Template
+
+## Description
+{{ description | default("A prompt template for LLM interactions") }}
+
+## Parameters
+
+{{ keep_parameter_var }}
+
+## Prompt Template
+```
+{{ content | default("Your prompt content goes here.") }}
+```
+
+## Usage Notes
+{{ usage_notes | default("Add usage notes here.") }}

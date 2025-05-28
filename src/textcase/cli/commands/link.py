@@ -16,71 +16,12 @@
 """Link command implementation."""
 
 from pathlib import Path
+from typing import Optional
 import click
 
 from ...core.case_item import create_case_item
-from ...cli.utils import debug_echo
+from ...cli.utils import debug_echo, get_document_path, get_document_item
 from ...protocol.module import Module
-
-
-def get_document_path(doc_id: str, project, ctx) -> tuple[Path, Module, str]:
-    """Get the document path from a document ID.
-    
-    Args:
-        doc_id: The document ID in the format PREFIX[ID]
-        project: The project to search in
-        ctx: Click context for debug output
-        
-    Returns:
-        A tuple of (document_path, module, formatted_id) or (None, None, None) if not found
-    """
-    # Try to parse the document ID to get prefix and ID parts
-    prefix = None
-    item_id = None
-    
-    # Extract prefix and ID (e.g., REQ001 -> prefix=REQ, id=001)
-    import re
-    match = re.match(r'^([A-Za-z]+)(\d+)$', doc_id)
-    if match:
-        prefix = match.group(1).upper()
-        item_id = match.group(2)
-    else:
-        debug_echo(ctx, f"Could not parse document ID: {doc_id}")
-        return None, None, None
-    
-    debug_echo(ctx, f"Parsed document ID: prefix={prefix}, id={item_id}")
-    
-    # Find the module with this prefix
-    module = None
-    
-    # First try the project's own prefix
-    if prefix == project.prefix:
-        module = project
-    else:
-        # Check all submodules
-        submodules = project.get_submodules()
-        debug_echo(ctx, f"Available submodules: {[m.prefix for m in submodules]}")
-        
-        for submodule in submodules:
-            if submodule.prefix == prefix:
-                module = submodule
-                break
-    
-    if not module:
-        debug_echo(ctx, f"No module found for prefix: {prefix}")
-        return None, None, None
-    
-    debug_echo(ctx, f"Found module: {module.prefix} at {module.path}")
-    
-    # Create a case item to get the formatted ID and path
-    case_item = module.get_document_item(item_id)
-    formatted_id = case_item.key
-    
-    # Get the document path
-    doc_path = module.path / f"{formatted_id}.md"
-    debug_echo(ctx, f"Document path: {doc_path}")
-    
-    return doc_path, module, formatted_id
 
 
 @click.command()
@@ -93,10 +34,18 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
     """Link two documents.
     
     Creates a link from the SOURCE document to the TARGET document.
-    Both SOURCE and TARGET should be document IDs in the format PREFIX[ID].
+    
+    SOURCE format: PREFIX[ID][:region]
+    TARGET format: PREFIX[ID]
+    
+    The optional region specifier determines where the link is created:
+      - meta, frontmatter: Link in the document's frontmatter (default)
+      - body, content: Link in the document's content
     
     Examples:
-      textcase link TST1 REQ1                # Link TST001 to REQ001 with no label
+      textcase link TST1 REQ1                # Link TST001 to REQ001 with no label (in frontmatter)
+      textcase link TST1:meta REQ1           # Explicitly link in frontmatter
+      textcase link TST1:content REQ1        # Link in document content
       textcase link TST1 REQ1 -l "related"   # Link with a specific label
       textcase link TST001 REQ001             # Link using full IDs
     """
@@ -110,8 +59,8 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
         click.echo("Error: No valid project found.", err=True)
         ctx.exit(1)
     
-    # Get the source document path and module
-    source_path, source_module, source_formatted_id = get_document_path(source, project, ctx)
+    # Get the source document path, module, and region
+    source_path, source_module, source_formatted_id, source_region = get_document_path(source, project, ctx)
     if not source_path or not source_module:
         click.echo(f"Error: Could not find source document '{source}'.", err=True)
         ctx.exit(1)
@@ -122,7 +71,7 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
         ctx.exit(1)
     
     # Get the target document path and module
-    target_path, target_module, target_formatted_id = get_document_path(target, project, ctx)
+    target_path, target_module, target_formatted_id, _ = get_document_path(target, project, ctx)
     if not target_path or not target_module:
         click.echo(f"Error: Could not find target document '{target}'.", err=True)
         ctx.exit(1)
@@ -133,26 +82,23 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
         ctx.exit(1)
     
     # Get case items from the modules
-    source_id = source_formatted_id.split(source_module.prefix)[-1].lstrip('-')
-    target_id = target_formatted_id.split(target_module.prefix)[-1].lstrip('-')
+    source_item, _ = get_document_item(source, project, ctx)
+    target_item, _ = get_document_item(target, project, ctx)
     
-    source_item = source_module.get_document_item(source_id)
-    target_item = target_module.get_document_item(target_id)
-    
-    # Set the paths explicitly if needed
-    if hasattr(source_item, 'path') and source_item.path is None:
-        source_item.path = source_path
-    
-    if hasattr(target_item, 'path') and target_item.path is None:
-        target_item.path = target_path
+    if not source_item or not target_item:
+        click.echo(f"Error: Could not get document items.", err=True)
+        ctx.exit(1)
     
     # Create the link
     try:
-        source_item.make_link(target_item, label)
+        source_item.make_link(target_item, label, source_region)
         link_info = f"{source_formatted_id} -> {target_formatted_id}"
         if label:
             link_info += f' ("{label}")'
+        if source_region:
+            link_info += f" [region: {source_region}]"
         click.echo(f"Linked: {link_info} ({source_path.parent} -> {target_path.parent})")
+
     except Exception as e:
         click.echo(f"Error creating link: {e}", err=True)
         ctx.exit(1)

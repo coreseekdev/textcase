@@ -99,7 +99,30 @@ class MarkdownItem(FileDocumentItem):
         """Set the path to the markdown file."""
         self._path = value
     
-    def make_link(self, target: CaseItem, label: Optional[str] = None) -> bool:
+    def make_link(self, target: CaseItem, label: Optional[str] = None, region: Optional[str] = None) -> bool:
+        """Create a link from this document to the target document.
+        
+        Args:
+            target: The target CaseItem to link to
+            label: Optional label for the link
+            region: Optional region where to create the link (e.g., "frontmatter", "content")
+
+        Returns:
+            True if the link was successfully created, False otherwise
+        """
+        if region is None and label is None:
+            # 如果没有给出具体的 label ( 即没有给出在 markdown 文件中的位置 )
+            # 则默认在 frontmatter 中创建 link
+            region = 'frontmatter'
+        
+        if region in ['frontmatter', 'meta']:
+            # 如果明确给出了是在 meta | frontmatter 中创建 link
+            return self.make_link_frontmatter(target, label)
+        
+        # 
+        return False
+    
+    def make_link_frontmatter(self, target: CaseItem, label: Optional[str] = None) -> bool:
         """Create a link from this document to the target document.
         
         This method adds a link to the YAML frontmatter of the markdown file.
@@ -158,7 +181,32 @@ class MarkdownItem(FileDocumentItem):
         
         return False  # Link already exists
     
+    def make_link_markdown(self, target: CaseItem, label: Optional[str] = None) -> bool:
+        """Create a link from this document to the target document.
+        
+        Args:
+            target: The target CaseItem to link to
+            label: Optional label for the link
+        
+        Returns:
+            True if the link was successfully created, False otherwise
+        """
+        ...
+
     def get_links(self) -> Dict[str, List[str]]:
+        """Get all links defined in this document.
+        
+        Returns:
+            A dictionary mapping target keys to lists of labels.
+            An empty list means the link exists but has no labels.
+            
+        Raises:
+            ValueError: If the document path is not set
+            FileNotFoundError: If the document file does not exist
+        """
+        ...
+
+    def get_links_frontmatter(self) -> Dict[str, List[str]]:
         """Get all links defined in this document.
         
         Returns:

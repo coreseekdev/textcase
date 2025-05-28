@@ -214,13 +214,14 @@ class CaseItem(Protocol):
         ...
 
     @abstractmethod
-    def make_link(self, target: CaseItem, label: Optional[str] = None) -> bool:
+    def make_link(self, target: CaseItem, label: Optional[str] = None, region: Optional[str] = None) -> bool:
         """Create a link from this document to the target document.
         
         Args:
             target: The target CaseItem to link to
             label: Optional label for the link
-            
+            region: Optional region where to create the link (e.g., "frontmatter", "content")
+
         Returns:
             True if the link was successfully created, False otherwise
         """
@@ -242,13 +243,14 @@ class DocumentCaseItem(CaseItem, Protocol):
     This extends CaseItem with document-specific functionality,
     such as creating links between documents.
     """
-    
-    def make_link(self, target: CaseItem, label: Optional[str] = None) -> bool:
+    def make_link(self, target: CaseItem, label: Optional[str] = None, region: Optional[str] = None) -> bool:
         """Create a link from this document to the target document.
         
         Args:
             target: The target CaseItem to link to
             label: Optional label for the link
+            region: Optional region where to create the link (e.g., "frontmatter", "content")
+                   If None, implementation will use a default behavior
             
         Returns:
             True if the link was successfully created, False otherwise
