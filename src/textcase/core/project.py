@@ -216,6 +216,32 @@ class _YamlProject(YamlModule, Project, ProjectTags):
                 return module
         raise KeyError(f"No submodule named '{name}'")
     
+    def get_provider(self, provider_name: str) -> Any:
+        """
+        Get a provider instance by name.
+        
+        Args:
+            provider_name: Name of the provider to get
+            
+        Returns:
+            Provider instance
+            
+        Raises:
+            ValueError: If the provider configuration cannot be found
+        """
+        # Get the provider configuration path
+        config_path = self.path / '.config' / 'provider' / f"{provider_name}.yml"
+        
+        # Check if the configuration file exists
+        if not config_path.exists():
+            raise ValueError(f"Provider configuration not found: {config_path}")
+        
+        # Import LLMFactory here to avoid circular imports
+        from ..core.llm import LLMFactory
+        
+        # Get or create the provider instance
+        return LLMFactory.get_provider(provider_name, config_path)
+    
     def get_model_providers(self, model_name: str) -> Dict[str, Any]:
         """
         Find all providers that support a specific model.

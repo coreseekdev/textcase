@@ -89,99 +89,43 @@ def ask(ctx, model_or_provider: str, prompt: str, stream: bool = True, temperatu
         ctx.exit(1)
     
     try:
-        # Handle agent-based inference
+        # Prepare kwargs
+        kwargs = {}
+        if temperature is not None:
+            kwargs['temperature'] = temperature
+        if max_tokens is not None:
+            kwargs['max_tokens'] = max_tokens
+            
+        # Create agent (either named agent or default agent with model)
         if 'is_agent' in locals() and is_agent:
+            # Use named agent
             logger.info(f"Using agent: {agent_name}")
             click.echo(f"Using agent: {agent_name}")
-            
-            try:
-                # Create agent
-                agent = AgentFactory.get_agent(project, agent_name)
-                
-                # Prepare kwargs
-                kwargs = {}
-                if temperature is not None:
-                    kwargs['temperature'] = temperature
-                if max_tokens is not None:
-                    kwargs['max_tokens'] = max_tokens
-                
-                # Run inference
-                if stream:
-                    logger.info("Using streaming mode with agent")
-                    asyncio.run(stream_agent_response(agent, prompt, **kwargs))
-                else:
-                    logger.info("Using non-streaming mode with agent")
-                    response = asyncio.run(agent.generate(prompt, **kwargs))
-                    click.echo(response.content)
-                    
-                    # Print usage statistics if available
-                    if response.usage:
-                        logger.debug(f"Usage statistics: {response.usage}")
-                        click.echo("\nUsage statistics:")
-                        for key, value in response.usage.items():
-                            click.echo(f"  {key}: {value}")
-                            
-            except Exception as e:
-                logger.exception(f"Error during agent inference: {str(e)}")
-                click.echo(f"Error: {e}", err=True)
-                ctx.exit(1)
-                
-        elif provider_name:
-            # Use specified provider
-            config_path = config_dir / f"{provider_name}.yml"
-            logger.debug(f"Looking for provider config at: {config_path}")
-            
-            if not config_path.exists():
-                logger.error(f"Provider configuration not found: {config_path}")
-                click.echo(f"Error: Provider configuration not found: {config_path}", err=True)
-                ctx.exit(1)
-            
-            logger.info(f"Loading provider {provider_name} from {config_path}")
-            provider = LLMFactory.get_provider(provider_name, config_path)
-            
-            # Run the LLM inference
-            kwargs = {'temperature': temperature}
-            if max_tokens:
-                kwargs['max_tokens'] = max_tokens
-                
-            logger.info(f"Running inference with provider: {provider_name}, model: {model_name}")
-            logger.debug(f"Inference parameters: {kwargs}")
-            
-            if stream:
-                logger.info("Using streaming mode")
-                asyncio.run(stream_response(provider, prompt, model_name, **kwargs))
-            else:
-                logger.info("Using non-streaming mode")
-                response = asyncio.run(provider.generate(prompt, model_name, **kwargs))
-                click.echo(response.content)
-                
-                # Print usage statistics if available
-                if response.usage:
-                    logger.debug(f"Usage statistics: {response.usage}")
-                    click.echo("\nUsage statistics:")
-                    for key, value in response.usage.items():
-                        click.echo(f"  {key}: {value}")
+            agent = AgentFactory.get_agent(project, agent_name)
         else:
-            # Find provider that supports the model
-            logger.info(f"Searching for providers that support model: {model_name}")
-            providers = LLMFactory.get_model_providers(config_dir, model_name)
+            # Use default agent with model
+            logger.info(f"Using model: {model_name}, provider: {provider_name or 'auto'}")
+            click.echo(f"Using model: {model_name}, provider: {provider_name or 'auto'}")
+            agent = AgentFactory.get_agent(project, None, model_name, provider_name)
             
-            if not providers:
-                logger.error(f"No provider found for model: {model_name}")
-                click.echo(f"Error: No provider found for model: {model_name}", err=True)
-                ctx.exit(1)
+            # Add provider and model to kwargs if specified
+            if provider_name:
+                kwargs['provider'] = provider_name
+            kwargs['model'] = model_name
+        
+        # Stream or generate full response
+        if stream:
+            logger.info("Using streaming mode")
+            asyncio.run(stream_agent_response(agent, prompt, **kwargs))
+        else:
+            # Generate full response
+            logger.info("Using non-streaming mode")
+            response = asyncio.run(agent.generate(prompt, **kwargs))
+            click.echo(response.content)
             
-            # Use the first provider that supports the model
-            provider_name = next(iter(providers.keys()))
-            provider = providers[provider_name]
-            
-            logger.info(f"Selected provider: {provider_name} for model: {model_name}")
-            click.echo(f"Using provider: {provider_name}")
-            
-            # Run the LLM inference
-            kwargs = {'temperature': temperature}
-            if max_tokens:
-                kwargs['max_tokens'] = max_tokens
+            # Log usage if available
+            if response.usage:
+                logger.info(f"Usage: {response.usage}")
                 
             logger.debug(f"Inference parameters: {kwargs}")
             
@@ -211,10 +155,17 @@ def ask(ctx, model_or_provider: str, prompt: str, stream: bool = True, temperatu
     logger.info(f"Ask command completed in {duration:.2f} seconds")
 
 
-async def stream_agent_response(agent, prompt, **kwargs):
-    """Stream the response from an agent."""
-    request_id = f"agent-stream-{str(id(prompt))[:8]}"
-    logger.info(f"[{request_id}] Starting streaming response for agent: {agent.agent_name}")
+async def stream_content(generator, source_info, **kwargs):
+    """
+    Stream content from any async generator (agent or provider).
+    
+    Args:
+        generator: AsyncGenerator yielding content chunks
+        source_info: String identifying the source (e.g., 'agent:demo' or 'model:gpt-4o')
+        **kwargs: Additional parameters for logging
+    """
+    request_id = f"stream-{source_info}-{str(id(generator))[:8]}"
+    logger.info(f"[{request_id}] Starting streaming response from: {source_info}")
     
     # Log parameters
     temperature = kwargs.get('temperature', 0.7)
@@ -229,9 +180,9 @@ async def stream_agent_response(agent, prompt, **kwargs):
     
     try:
         # Stream the response chunk by chunk
-        logger.info(f"[{request_id}] Starting stream from agent")
+        logger.info(f"[{request_id}] Starting stream")
         
-        async for chunk in agent.generate_stream(prompt, **kwargs):
+        async for chunk in generator:
             chunk_count += 1
             chunk_length = len(chunk) if chunk else 0
             total_chars += chunk_length
@@ -278,72 +229,17 @@ async def stream_agent_response(agent, prompt, **kwargs):
             truncated = accumulated_text[:100] + "..." if len(accumulated_text) > 100 else accumulated_text
             logger.debug(f"[{request_id}] Partial content received before error: '{truncated}'")
             logger.debug(f"[{request_id}] Partial content length: {len(accumulated_text)} chars")
+
+
+async def stream_agent_response(agent, prompt, **kwargs):
+    """Stream the response from an agent."""
+    source_info = f"agent:{agent.agent_name}"
+    generator = agent.generate_stream(prompt, **kwargs)
+    await stream_content(generator, source_info, **kwargs)
 
 
 async def stream_response(provider, prompt, model, **kwargs):
     """Stream the response from the LLM."""
-    request_id = f"stream-{model}-{str(id(prompt))[:8]}"
-    logger.info(f"[{request_id}] Starting streaming response for model: {model}")
-    
-    # Log parameters
-    temperature = kwargs.get('temperature', 0.7)
-    max_tokens = kwargs.get('max_tokens', None)
-    logger.debug(f"[{request_id}] Parameters: temperature={temperature}, max_tokens={max_tokens}")
-    
-    # Track metrics
-    start_time = time.time()
-    chunk_count = 0
-    total_chars = 0
-    accumulated_text = ""
-    
-    try:
-        # Stream the response chunk by chunk
-        logger.info(f"[{request_id}] Starting stream from provider")
-        
-        async for chunk in provider.generate_stream(prompt, model, **kwargs):
-            chunk_count += 1
-            chunk_length = len(chunk) if chunk else 0
-            total_chars += chunk_length
-            
-            # Log chunk details periodically to avoid excessive logging
-            if chunk_count == 1 or chunk_count % 10 == 0 or chunk_length == 0:
-                logger.debug(f"[{request_id}] Received chunk #{chunk_count}, length: {chunk_length} chars")
-                if chunk_length == 0:
-                    logger.warning(f"[{request_id}] Empty chunk received")
-            
-            # Print only the new chunk, not the full response each time
-            if chunk:
-                # Use print with flush=True instead of click.echo to ensure immediate display
-                print(chunk, end='', flush=True)
-                accumulated_text += chunk
-                
-                # Log the content being displayed for debugging
-                logger.debug(f"[{request_id}] Displayed content: '{chunk}'")
-                
-                # Double ensure flush
-                sys.stdout.flush()
-            
-        # Log completion statistics
-        end_time = time.time()
-        duration = end_time - start_time
-        logger.info(f"[{request_id}] Streaming completed in {duration:.2f}s")
-        logger.info(f"[{request_id}] Received {chunk_count} chunks, total {total_chars} chars")
-        
-        # Add final newline after streaming is complete
-        print("\n", flush=True)  # Use print with flush instead of click.echo
-        
-    except Exception as e:
-        # Log the error
-        end_time = time.time()
-        duration = end_time - start_time
-        logger.exception(f"[{request_id}] Error during streaming after {duration:.2f}s: {str(e)}")
-        logger.error(f"[{request_id}] Chunks received before error: {chunk_count}")
-        
-        # Show error to user
-        click.echo(f"\nError: {e}", err=True)
-        
-        # If we have partial content, log it for debugging
-        if accumulated_text:
-            truncated = accumulated_text[:100] + "..." if len(accumulated_text) > 100 else accumulated_text
-            logger.debug(f"[{request_id}] Partial content received before error: '{truncated}'")
-            logger.debug(f"[{request_id}] Partial content length: {len(accumulated_text)} chars")
+    source_info = f"model:{model}"
+    generator = provider.generate_stream(prompt, model, **kwargs)
+    await stream_content(generator, source_info, **kwargs)
