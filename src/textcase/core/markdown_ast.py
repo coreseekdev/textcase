@@ -105,14 +105,38 @@ class ListNode(MarkdownNode):
 class ListItemNode(MarkdownNode):
     """Node representing a list item in Markdown."""
     
-    def __init__(self, text: str, line: int, is_task: bool = False, is_checked: bool = False):
+    def __init__(self, content: str, line: int = -1, is_task: bool = False, is_checked: bool = False):
         super().__init__('list_item', line)
-        self.text = text
+        self.content = content
         self.is_task = is_task
-        self.is_checked = is_checked if is_task else False
-        self.has_link = False
-        self.link_url = ""
-        self.link_text = ""
+        self.is_checked = is_checked
+        self.links = []  # Will store LinkNode objects
+        
+        # Extract links from content if any
+        self._extract_links_from_content()
+        
+    def _extract_links_from_content(self):
+        """Extract links from the content using regex.
+        Markdown link format: [text](url)
+        """
+        import re
+        
+        # Regular expression to match Markdown links: [text](url)
+        link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+        
+        # Find all links in the content
+        matches = re.findall(link_pattern, self.content)
+        
+        # Create LinkNode objects for each match
+        for text, url in matches:
+            link_node = LinkNode(url, text, self.line)
+            self.links.append(link_node)
+            
+        # Set convenience flags for backward compatibility
+        self.has_link = len(self.links) > 0
+        if self.has_link:
+            self.link_url = self.links[0].url
+            self.link_text = self.links[0].text
         
     def to_dict(self) -> Dict[str, Any]:
         """Convert the node to a dictionary representation."""
@@ -311,44 +335,80 @@ def parse_markdown(content: str, debug: bool = False) -> RootNode:
             # Look for inline content
             for j in range(i + 1, min(i + 5, len(tokens))):
                 if tokens[j].type == 'inline':
-                    content = tokens[j].content.strip()
+                    inline_token = tokens[j]
+                    content = inline_token.content.strip()
+                    children = inline_token.children if hasattr(inline_token, 'children') else []
                     
-                    # Check if it's a task list item
-                    is_task = content.startswith('[ ] ') or content.startswith('[x] ')
-                    is_checked = content.startswith('[x] ')
+                    # Check if it's a task list item by examining children
+                    is_task = False
+                    is_checked = False
+                    task_text = content
+                    
+                    # First try to detect task list items using children
+                    if children:
+                        # Look for checkbox pattern in the first child
+                        for child_idx, child in enumerate(children):
+                            if child.type == 'text' and child.content.strip().startswith('[ ]'):
+                                is_task = True
+                                is_checked = False
+                                # Extract task text from this and subsequent children
+                                task_text = child.content.strip()[4:].strip()
+                                break
+                            elif child.type == 'text' and child.content.strip().startswith('[x]'):
+                                is_task = True
+                                is_checked = True
+                                # Extract task text from this and subsequent children
+                                task_text = child.content.strip()[4:].strip()
+                                break
+                    
+                    # Fallback to content-based detection if children approach didn't work
+                    if not is_task and (content.startswith('[ ] ') or content.startswith('[x] ')):
+                        is_task = True
+                        is_checked = content.startswith('[x] ')
+                        task_text = content[4:].strip()
                     
                     if is_task:
                         # Mark the list as a task list
                         current_list.list_type = 'task'
                         in_task_list = True
                         
-                        # Extract task text (remove task marker)
-                        task_text = content[4:].strip()
-                        
                         # Create list item node
                         list_item = ListItemNode(task_text, item_start, True, is_checked)
-                        
-                        # Check for links in the task item
-                        if hasattr(tokens[j], 'children') and tokens[j].children:
-                            has_link = False
-                            link_url = ""
-                            link_text = ""
-                            
-                            for child in tokens[j].children:
-                                if child.type == 'link_open':
-                                    has_link = True
-                                    if 'href' in child.attrs:
-                                        link_url = child.attrs['href']
-                                elif child.type == 'text' and has_link:
-                                    link_text = child.content
-                            
-                            if has_link:
-                                list_item.has_link = True
-                                list_item.link_url = link_url
-                                list_item.link_text = link_text
                     else:
                         # Regular list item
-                        list_item = ListItemNode(content, item_start)
+                        list_item = ListItemNode(content, item_start, False, False)
+                    
+                    # Process links in the task item by examining children
+                    if children:  
+                        current_link = None
+                        link_text_buffer = ""
+                        
+                        # Scan through children to find links
+                        for child_idx, child in enumerate(children):
+                            if child.type == 'link_open':
+                                # Start of a new link
+                                current_link = {
+                                    'url': child.attrs.get('href', ''),
+                                    'text': ''
+                                }
+                            elif child.type == 'link_close' and current_link:
+                                # End of a link, create a LinkNode
+                                current_link['text'] = link_text_buffer.strip()
+                                link_node = LinkNode(current_link['url'], current_link['text'], item_start)
+                                list_item.links.append(link_node)
+                                
+                                # Reset for next link
+                                link_text_buffer = ""
+                                current_link = None
+                            elif child.type == 'text' and current_link is not None:
+                                # Collecting text inside a link
+                                link_text_buffer += child.content
+                        
+                        # Set convenience properties for backward compatibility
+                        if list_item.links:
+                            list_item.has_link = True
+                            list_item.link_url = list_item.links[0].url
+                            list_item.link_text = list_item.links[0].text
                     
                     # Add to the current list
                     current_list.add_child(list_item)

@@ -199,7 +199,42 @@ class MarkdownItem(FileDocumentItem):
         task_list = self._find_task_list_for_heading(ast, target_heading)
         
         if task_list:
-            # Found an existing task list, add to its end
+            # Found an existing task list, check if target already exists
+            target_exists = False
+            target_key = target.key
+            target_path_name = target.path.name
+            
+            print(f"DEBUG: Checking for existing link to {target_key} in task list with {len(task_list.children)} items")
+            
+            # Check each list item to see if it contains a link to the target
+            for idx, item in enumerate(task_list.children):
+                print(f"DEBUG: Checking list item {idx}: {item.content}")
+                
+                # Direct content check - this is the most reliable method
+                exact_link_pattern = f"[{target_key}]({target_path_name})"
+                if exact_link_pattern in item.content:
+                    print(f"DEBUG: Found exact link match '{exact_link_pattern}' in item content: '{item.content}'")
+                    target_exists = True
+                    break
+                
+                # Check links extracted by the parser
+                if hasattr(item, 'links') and item.links:
+                    print(f"DEBUG: Item has {len(item.links)} links")
+                    for link in item.links:
+                        print(f"DEBUG: Found link - URL: {link.url}, Text: {link.text}")
+                        print(f"DEBUG: Target key: {target_key}, Target path name: {target_path_name}")
+                        # Compare both text and URL for matches
+                        if link.url == target_path_name:
+                            print(f"DEBUG: Target {target_key} already exists in task list, skipping")
+                            target_exists = True
+                            break
+            
+            if target_exists:
+                # Target already exists, don't add it again
+                print(f"DEBUG: Skipping link creation as target {target_key} already exists in the task list")
+                return True
+            
+            # Target doesn't exist, add to the end of the task list
             position = task_list.end_line
             
             # Handle the case where end_line is not properly set
