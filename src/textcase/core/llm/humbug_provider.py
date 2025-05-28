@@ -10,8 +10,10 @@ from pathlib import Path
 
 from humbug.ai.ai_provider import AIProvider
 from humbug.ai.ai_backend_settings import AIBackendSettings
-from humbug.ai.ai_conversation_settings import AIConversationSettings
 from humbug.ai.ai_message import AIMessage, AIMessageSource
+
+# 使用自定义的会话设置类代替原始的 AIConversationSettings
+from textcase.core.llm.conversation_settings import TextcaseConversationSettings
 
 from textcase.core.llm.provider import LLMProvider, LLMResponse
 from textcase.core.logging import get_logger
@@ -93,7 +95,7 @@ class HumbugProvider(LLMProvider):
         
         # Create conversation settings
         logger.debug(f"[{request_id}] Creating conversation settings")
-        conversation_settings = AIConversationSettings(
+        conversation_settings = TextcaseConversationSettings(
             model=model,
             temperature=temperature
         )
@@ -210,7 +212,7 @@ class HumbugProvider(LLMProvider):
         
         # Create conversation settings
         logger.debug(f"[{request_id}] Creating conversation settings")
-        conversation_settings = AIConversationSettings(
+        conversation_settings = TextcaseConversationSettings(
             model=model,
             temperature=temperature
         )
