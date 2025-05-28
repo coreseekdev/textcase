@@ -6,7 +6,7 @@ authors = ["coreseek.com <info@coreseek.com>"]
 readme = "README.md"
 packages = [{include = "textcase", from = "src"}]
 license = "Apache-2.0"
-include = ["textcase/py.typed", "src/textcase/data/templates/**/*"]
+include = ["textcase/py.typed", "src/data/templates/**/*"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -16,6 +16,9 @@ uuid = "^1.30"
 markdown-it-py = "^3.0.0"
 python-frontmatter = "^1.1.0"
 jinja2 = "^3.1.6"
+humbug = { git = "https://github.com/coreseekdev/humbug.git", branch = "feature/optional-gui-deps" }
+aiohttp = "^3.9.0"
+certifi = "^2024.2.2"
 
 [tool.poetry.scripts]
 tse = "textcase.cli:main"

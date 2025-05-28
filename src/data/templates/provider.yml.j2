@@ -3,7 +3,7 @@ type: "{{ type | default('openai') }}"
 # API configuration
 api_key: "{{ api_key }}"
 api_base: "{{ api_base | default('https://api.openai.com/v1') }}"
-api_version: "{{ api_version | default('') }}"
+api_version: "{{ api_version | default('v1') }}"
 
 # Model configuration
 model: 
