@@ -214,7 +214,7 @@ class BaseModule(Module):
         This does not require the item to exist on disk.
         
         Args:
-            id: The ID of the document item.
+            id: The ID of the document item. If the ID already includes the prefix, it will be extracted.
                 
         Returns:
             A DocumentItem with the module's prefix, settings and the given ID.
@@ -228,6 +228,17 @@ class BaseModule(Module):
         prefix = self.prefix
         if not prefix:
             raise ValueError("Cannot create document item: module has no prefix")
+        
+        # Check if ID already includes the prefix and extract just the ID part
+        # This prevents duplication of the prefix when creating the case item
+        if id.startswith(prefix):
+            # Get the separator from settings or use default
+            sep = self._config.settings.get('sep', '-') if self._config and hasattr(self._config, 'settings') else '-'
+            # Remove prefix and separator if present
+            if sep and id.startswith(f"{prefix}{sep}"):
+                id = id[len(prefix) + len(sep):]
+            else:
+                id = id[len(prefix):]
             
         # Get relevant settings from config
         settings = {}

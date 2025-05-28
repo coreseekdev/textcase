@@ -116,9 +116,10 @@ def validate_item_id(ctx: click.Context, module: Module, name: str) -> Tuple[boo
 @click.command()
 @click.option('-n', '--name', help='Specify a custom name or number for the case item')
 @click.option('-q', '--quiet', is_flag=True, help='Skip opening the editor and save directly')
+@click.option('-m', '--message', help='Specify content message for the case item (supports multi-line)')
 @click.argument('module_prefix', type=str)
 @click.pass_context
-def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None, quiet: bool = False):
+def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None, quiet: bool = False, message: Optional[str] = None):
     """
     Add a new case item to a module or a new configuration.
     
@@ -128,10 +129,12 @@ def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None, quie
     template in the .config/template directory and name is the configuration name.
     
     Example usage:
-      textcase add REQ                # Add a new case item with auto-generated ID
-      textcase add -n FOOBAR REQ      # Add a new case item with custom string name
-      textcase add -n 3 REQ           # Add a new case item with custom numeric ID
-      textcase add prompt:my_prompt   # Add a new configuration using the 'prompt' template
+      textcase add REQ                           # Add a new case item with auto-generated ID
+      textcase add -n FOOBAR REQ                 # Add a new case item with custom string name
+      textcase add -n 3 REQ                      # Add a new case item with custom numeric ID
+      textcase add -m "My content" REQ           # Add a case item with specified content
+      textcase add -m "Multi-line\ncontent" REQ  # Add with multi-line content
+      textcase add prompt:my_prompt              # Add a new configuration using the 'prompt' template
     """
     # Get project from context
     project = ctx.obj.get('project')
@@ -197,8 +200,14 @@ def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None, quie
     
     debug_echo(ctx, f"Creating case item at {file_path}")
     
-    # Create initial content with a title
-    initial_content = f"# {full_id}\n\n"
+    # Create initial content with a title and optional message
+    if message:
+        # Add the title with a separator and the message
+        initial_content = f"# {full_id}: {message}\n\n"
+        quiet = True
+    else:
+        # Just add the title
+        initial_content = f"# {full_id}\n\n"
     
     try:
         if quiet:
