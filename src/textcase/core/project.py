@@ -5,7 +5,7 @@ This module provides the implementation of the Project protocol.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, cast
+from typing import Dict, List, Optional, cast, Any
 
 from ..protocol.module import Module, Project, ProjectTags, SubmoduleInfo
 from ..protocol.vfs import VFS
@@ -13,6 +13,7 @@ from .module import YamlModule
 from .project_config import YamlProjectConfig
 # from .project_tag import TagManager
 from .vfs import get_default_vfs
+from ..core.llm.provider import LLMProvider
 
 # Private implementation class
 class _YamlProject(YamlModule, Project, ProjectTags):
@@ -214,6 +215,50 @@ class _YamlProject(YamlModule, Project, ProjectTags):
             if module.path.name == name:
                 return module
         raise KeyError(f"No submodule named '{name}'")
+    
+    def get_model_providers(self, model_name: str) -> Dict[str, Any]:
+        """
+        Find all providers that support a specific model.
+        
+        Args:
+            model_name: Name of the model to find providers for
+            
+        Returns:
+            Dictionary mapping provider names to provider instances
+        """
+        result = {}
+        
+        # Get the provider configuration directory
+        config_dir = self.path / '.config' / 'provider'
+        
+        # Check if the directory exists
+        if not config_dir.exists():
+            return result
+        
+        # Import LLMFactory here to avoid circular imports
+        from ..core.llm import LLMFactory
+        
+        # Find all providers that support the model
+        return LLMFactory.get_model_providers(config_dir, model_name)
+    
+    def list_available_agents(self) -> List[str]:
+        """
+        List all available agents for this project.
+        
+        Returns:
+            List of agent names (without file extensions)
+        """
+        agent_dir = self.path / '.config' / 'agent'
+        
+        if not agent_dir.exists():
+            return []
+        
+        # Find all .md files in the agent directory
+        agents = []
+        for agent_file in agent_dir.glob('*.md'):
+            agents.append(agent_file.stem)
+            
+        return agents
     
     def remove_submodule(self, name: str) -> None:
         # Find the module by name
