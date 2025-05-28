@@ -30,7 +30,6 @@ from ..core import create_project, get_default_vfs
 from .commands.create import create
 from .commands.edit import edit
 from .commands.link import link
-from .commands.unlink import unlink
 from .commands.clear import clear
 from .commands.archive import archive
 from .commands.add import add
@@ -105,7 +104,6 @@ def cli(ctx: click.Context, project_path: Optional[Path] = None, verbose: bool =
 cli.add_command(create)
 cli.add_command(edit)
 cli.add_command(link)
-cli.add_command(unlink)
 cli.add_command(clear)
 cli.add_command(archive)
 cli.add_command(add)
