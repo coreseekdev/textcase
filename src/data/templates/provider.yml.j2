@@ -1,0 +1,17 @@
+type: "{{ type | default('openai') }}"
+
+# API configuration
+api_key: "{{ api_key }}"
+api_base: "{{ api_base | default('https://api.openai.com/v1') }}"
+api_version: "{{ api_version | default('') }}"
+
+# Model configuration
+model: 
+{%- set model_list = model | default('gpt-4') -%}
+{%- if model is string and ',' in model -%}
+  {%- for m in model.split(',') %}
+  - "{{ m }}"
+  {%- endfor -%}
+{%- else %}
+  - "{{ model | default('gpt-4') }}"
+{%- endif -%}

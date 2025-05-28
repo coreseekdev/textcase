@@ -115,9 +115,10 @@ def validate_item_id(ctx: click.Context, module: Module, name: str) -> Tuple[boo
 
 @click.command()
 @click.option('-n', '--name', help='Specify a custom name or number for the case item')
+@click.option('-q', '--quiet', is_flag=True, help='Skip opening the editor and save directly')
 @click.argument('module_prefix', type=str)
 @click.pass_context
-def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None):
+def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None, quiet: bool = False):
     """
     Add a new case item to a module or a new configuration.
     
@@ -144,7 +145,7 @@ def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None):
         from textcase.cli.commands.add_conf import add_conf_command
         
         # Handle as a configuration command
-        success = add_conf_command(ctx, module_prefix)
+        success = add_conf_command(ctx, module_prefix, quiet=quiet)
         ctx.exit(0 if success else 1)
     
     # Find the module with the given prefix
@@ -199,46 +200,86 @@ def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None):
     # Create initial content with a title
     initial_content = f"# {full_id}\n\n"
     
-    # Edit the file
     try:
-        # Start a monitoring thread to watch for file changes
-        monitor_thread = threading.Thread(
-            target=monitor_file_changes,
-            args=(file_path, module, full_id),
-            daemon=True
-        )
-        monitor_thread.start()
-        
-        # Open the editor
-        was_modified, content = edit_with_editor(file_path, initial_content.encode('utf-8'))
-        
-        if was_modified and file_path.exists():
-            # File was modified and saved, add to module order
+        if quiet:
+            # In quiet mode, create the file directly
             try:
-                # Create the case item using the factory function
-                from textcase.core.case_item import create_case_item
-                case_item = create_case_item(
-                    prefix=prefix,
-                    id=item_id,
-                    settings=module.config.settings if hasattr(module, 'config') else {},
-                    path=file_path
-                )
-                module.order.add_item(case_item)
-                module.order._save_items()  # Force save the order
-                click.echo(f"Added case item: {full_id}")
-            except Exception as e:
-                click.echo(f"Error adding item to module order: {e}", err=True)
-        else:
-            # User canceled or didn't save, delete the file if it exists
-            if file_path.exists():
-                try:
-                    module._vfs.remove(file_path)
-                    click.echo(f"Canceled: Item {full_id} not created.")
-                except Exception as e:
-                    click.echo(f"Error removing temporary file: {e}", err=True)
-            else:
-                click.echo(f"Canceled: Item {full_id} not created.")
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(initial_content)
+                was_modified = True
                 
+                # In quiet mode, directly add to module order
+                try:
+                    from textcase.core.case_item import create_case_item
+                    case_item = create_case_item(
+                        prefix=prefix,
+                        id=item_id,
+                        settings=module.config.settings if hasattr(module, 'config') else {},
+                        path=file_path
+                    )
+                    module.order.add_item(case_item)
+                    module.order._save_items()  # Force save the order
+                    click.echo(f"Added case item: {full_id}")
+                except Exception as e:
+                    click.echo(f"Error adding item to module order: {e}", err=True)
+                    if file_path.exists():
+                        try:
+                            module._vfs.remove(file_path)
+                        except Exception:
+                            pass
+                    ctx.exit(1)
+                    
+            except Exception as e:
+                click.echo(f"Error creating case item: {e}", err=True)
+                ctx.exit(1)
+        else:
+            # Interactive mode: open the editor
+            try:
+                # Start a monitoring thread to watch for file changes
+                monitor_thread = threading.Thread(
+                    target=monitor_file_changes,
+                    args=(file_path, module, full_id),
+                    daemon=True
+                )
+                monitor_thread.start()
+                
+                # Open the editor
+                was_modified, content = edit_with_editor(file_path, initial_content.encode('utf-8'))
+                
+                if was_modified and file_path.exists():
+                    # File was modified and saved, add to module order
+                    try:
+                        from textcase.core.case_item import create_case_item
+                        case_item = create_case_item(
+                            prefix=prefix,
+                            id=item_id,
+                            settings=module.config.settings if hasattr(module, 'config') else {},
+                            path=file_path
+                        )
+                        module.order.add_item(case_item)
+                        module.order._save_items()  # Force save the order
+                        click.echo(f"Added case item: {full_id}")
+                    except Exception as e:
+                        click.echo(f"Error adding item to module order: {e}", err=True)
+                else:
+                    # User canceled or didn't save, delete the file if it exists
+                    if file_path.exists():
+                        try:
+                            module._vfs.remove(file_path)
+                            click.echo(f"Canceled: Item {full_id} not created.")
+                        except Exception as e:
+                            click.echo(f"Error removing temporary file: {e}", err=True)
+                    else:
+                        click.echo(f"Canceled: Item {full_id} not created.")
+                        
+            except Exception as e:
+                click.echo(f"Error in editor: {e}", err=True)
+                if file_path.exists():
+                    try:
+                        module._vfs.remove(file_path)
+                    except Exception:
+                        pass
+                ctx.exit(1)
     except Exception as e:
         click.echo(f"Error creating case item: {e}", err=True)
         # Clean up if file exists

@@ -37,22 +37,51 @@ def get_template_path(project: Module, template_name: str) -> Optional[Path]:
     
     Args:
         project: The project module
-        template_name: The name of the template
+        template_name: The base name of the template (without path or extensions)
         
     Returns:
         Path to the template file or None if not found
+        
+    Raises:
+        click.UsageError: If multiple matching template files are found
     """
     # Check if the template directory exists
     template_dir = project.path / ".config" / "template"
     if not template_dir.exists():
         return None
-        
-    # Look for a template file with the given name (ignoring extension)
+    
+    # Find all files where the base name matches template_name
+    # For example, if template_name is 'provider', it will match:
+    # - provider
+    # - provider.j2
+    # - provider.yml.j2
+    # etc.
+    matching_files = []
     for file_path in template_dir.iterdir():
-        if file_path.is_file() and file_path.stem == template_name:
-            return file_path
+        if not file_path.is_file():
+            continue
             
-    return None
+        # Get the base name without any extensions
+        base_name = file_path.stem
+        # If the file has multiple extensions (e.g., .yml.j2), get the base name
+        if '.' in base_name:
+            base_name = base_name.split('.', 1)[0]
+            
+        if base_name == template_name:
+            matching_files.append(file_path)
+    
+    if not matching_files:
+        return None
+        
+    if len(matching_files) > 1:
+        files_list = '\n  '.join(str(f) for f in matching_files)
+        raise click.UsageError(
+            f"Multiple template files found for '{template_name}':\n"
+            f"  {files_list}\n"
+            "Please make sure there's only one template with this base name."
+        )
+    
+    return matching_files[0]
 
 
 class PreserveUndefined(jinja2.Undefined):
@@ -110,7 +139,7 @@ def render_template(ctx: click.Context, template_path: Path, context: Dict[str, 
         template_vars = jinja2.meta.find_undeclared_variables(ast)
         debug_echo(ctx, f"Found template variables: {template_vars}")
     except Exception as e:
-        debug_echo(ctx, f"Error parsing template: {e}", err=True)
+        click.echo(f"Error parsing template: {e}", err=True)
         return template_content
     
     # Create a copy of the context to avoid modifying the original
@@ -134,7 +163,7 @@ def render_template(ctx: click.Context, template_path: Path, context: Dict[str, 
         debug_echo(ctx, "=== Template rendering completed successfully ===")
         return content
     except Exception as e:
-        debug_echo(ctx, f"Error rendering template: {e}", err=True)
+        click.echo(f"Error rendering template: {e}", err=True)
         debug_echo(ctx, "Returning original template content due to error")
         return template_content
 
@@ -156,7 +185,7 @@ def parse_config_id(config_id: str) -> Tuple[str, str]:
     return parts[0].strip(), parts[1].strip()
 
 
-def add_configuration(ctx: click.Context, project: Module, template_name: str, config_name: str) -> bool:
+def add_configuration(ctx: click.Context, project: Module, template_name: str, config_name: str, quiet: bool = False) -> bool:
     """
     Add a new configuration based on a template.
     
@@ -165,6 +194,7 @@ def add_configuration(ctx: click.Context, project: Module, template_name: str, c
         project: The project module
         template_name: The name of the template to use
         config_name: The name of the configuration to create
+        quiet: If True, skip opening the editor and save the file directly
         
     Returns:
         True if successful, False otherwise
@@ -184,7 +214,13 @@ def add_configuration(ctx: click.Context, project: Module, template_name: str, c
     config_dir.mkdir(parents=True, exist_ok=True)
     
     # Determine the output file path
-    output_path = config_dir / f"{config_name}{template_path.suffix}"
+    if template_path.suffix == '.j2':
+        # For .j2 templates, remove the .j2 extension from the output filename
+        base_name = template_path.stem  # Remove .j2
+        output_path = config_dir / f"{config_name}{template_path.suffixes[-2] if len(template_path.suffixes) > 1 else ''}"
+    else:
+        # For non-.j2 templates, keep the original extension
+        output_path = config_dir / f"{config_name}{template_path.suffix}"
     if output_path.exists():
         click.echo(f"Error: Configuration '{config_name}' already exists.", err=True)
         return False
@@ -200,6 +236,9 @@ def add_configuration(ctx: click.Context, project: Module, template_name: str, c
             global_vars[var_name] = value
     
     # Add default values for required variables if not provided
+    """
+    注意： name 是被特别处理的。config_name 优先（即 配置项的文件名，就是 name )
+    """
     if 'name' not in global_vars:
         global_vars['name'] = config_name
     if 'description' not in global_vars:
@@ -220,20 +259,23 @@ def add_configuration(ctx: click.Context, project: Module, template_name: str, c
         temp_path = temp_file.name
     
     try:
-        # Convert temp_path to a Path object for edit_with_editor
-        temp_path_obj = Path(temp_path)
-        
-        # Open the temporary file in the editor
-        modified, _ = edit_with_editor(temp_path_obj)
-        
-        if not modified:
-            debug_echo(ctx, "No changes made, configuration not created.")
-            return False
+        if quiet:
+            # In quiet mode, use the rendered content directly
+            final_content = content
+            debug_echo(ctx, f"Skipping editor in quiet mode, saving directly to {output_path}")
+        else:
+            # Interactive mode: open the editor
+            temp_path_obj = Path(temp_path)
+            modified, _ = edit_with_editor(temp_path_obj)
             
-        # Read the modified content
-        with open(temp_path, 'r') as f:
-            final_content = f.read()
-            
+            if not modified:
+                debug_echo(ctx, "No changes made, configuration not created.")
+                return False
+                
+            # Read the modified content
+            with open(temp_path, 'r') as f:
+                final_content = f.read()
+        
         # Write the final content to the output file
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w') as f:
@@ -250,13 +292,14 @@ def add_configuration(ctx: click.Context, project: Module, template_name: str, c
     return True
 
 
-def add_conf_command(ctx: click.Context, config_id: str) -> bool:
+def add_conf_command(ctx: click.Context, config_id: str, quiet: bool = False) -> bool:
     """
     Handle the add_conf command.
     
     Args:
         ctx: Click context
         config_id: The configuration ID in the format 'template_name:name'
+        quiet: If True, skip opening the editor and save the file directly
         
     Returns:
         True if successful, False otherwise
@@ -278,4 +321,4 @@ def add_conf_command(ctx: click.Context, config_id: str) -> bool:
         return False
         
     # Add the configuration
-    return add_configuration(ctx, project, template_name, config_name)
+    return add_configuration(ctx, project, template_name, config_name, quiet=quiet)
