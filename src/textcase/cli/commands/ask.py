@@ -20,11 +20,11 @@ logger = get_logger(__name__)
 @click.command()
 @click.argument('model_or_provider', type=str)
 @click.argument('prompt', type=str)
-@click.option('--stream/--no-stream', default=True, help='Stream the response or wait for complete response')
+@click.option('--stream/--no-stream', default=False, help='Stream the response or wait for complete response')
 @click.option('--temperature', type=float, default=0.7, help='Temperature for response generation (0.0-1.0)')
 @click.option('--max-tokens', type=int, help='Maximum tokens to generate')
 @click.pass_context
-def ask(ctx, model_or_provider: str, prompt: str, stream: bool = True, temperature: float = 0.7,
+def ask(ctx, model_or_provider: str, prompt: str, stream: bool = False, temperature: float = 0.7,
         max_tokens: Optional[int] = None):
     """
     Test LLM inference capabilities.
@@ -128,21 +128,6 @@ def ask(ctx, model_or_provider: str, prompt: str, stream: bool = True, temperatu
                 logger.info(f"Usage: {response.usage}")
                 
             logger.debug(f"Inference parameters: {kwargs}")
-            
-            if stream:
-                logger.info("Using streaming mode")
-                asyncio.run(stream_response(provider, prompt, model_name, **kwargs))
-            else:
-                logger.info("Using non-streaming mode")
-                response = asyncio.run(provider.generate(prompt, model_name, **kwargs))
-                click.echo(response.content)
-                
-                # Print usage statistics if available
-                if response.usage:
-                    logger.debug(f"Usage statistics: {response.usage}")
-                    click.echo("\nUsage statistics:")
-                    for key, value in response.usage.items():
-                        click.echo(f"  {key}: {value}")
     
     except Exception as e:
         logger.exception(f"Error during LLM inference: {str(e)}")
@@ -235,11 +220,4 @@ async def stream_agent_response(agent, prompt, **kwargs):
     """Stream the response from an agent."""
     source_info = f"agent:{agent.agent_name}"
     generator = agent.generate_stream(prompt, **kwargs)
-    await stream_content(generator, source_info, **kwargs)
-
-
-async def stream_response(provider, prompt, model, **kwargs):
-    """Stream the response from the LLM."""
-    source_info = f"model:{model}"
-    generator = provider.generate_stream(prompt, model, **kwargs)
     await stream_content(generator, source_info, **kwargs)

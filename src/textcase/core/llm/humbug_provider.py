@@ -145,11 +145,26 @@ class HumbugProvider(LLMProvider):
                 if response.content:
                     # Only log content length to avoid filling logs with response text
                     content_len = len(response.content)
-                    prev_len = len(full_response)
-                    new_content_len = content_len - prev_len if content_len > prev_len else content_len
                     
-                    logger.debug(f"[{request_id}] Chunk #{chunk_count}: received {new_content_len} new chars")
-                    full_response += response.content
+                    # In non-streaming mode, we need to handle the full content differently
+                    # Each chunk from the API contains the complete response up to that point
+                    if chunk_count == 1:
+                        # First chunk - just store it
+                        full_response = response.content
+                        logger.debug(f"[{request_id}] Chunk #{chunk_count}: received initial content of {content_len} chars")
+                    else:
+                        # For subsequent chunks, only keep the latest complete response
+                        # Don't append to avoid duplication
+                        prev_len = len(full_response)
+                        
+                        # Check if this is a new, longer response
+                        if content_len > prev_len:
+                            new_content_len = content_len - prev_len
+                            logger.debug(f"[{request_id}] Chunk #{chunk_count}: received {new_content_len} new chars")
+                            full_response = response.content
+                        else:
+                            logger.debug(f"[{request_id}] Chunk #{chunk_count}: no new content (current: {content_len}, previous: {prev_len})")
+
                 else:
                     logger.debug(f"[{request_id}] Chunk #{chunk_count}: empty content")
                     
@@ -261,26 +276,64 @@ class HumbugProvider(LLMProvider):
                 if response.content:
                     # Get the complete current response
                     current_response = response.content
-                    logger.debug(f"[{request_id}] Chunk #{chunk_count}: received content of length {len(current_response)}")
+                    current_len = len(current_response)
+                    logger.debug(f"[{request_id}] Chunk #{chunk_count}: received content of length {current_len}")
                     
-                    # Only yield the new part that hasn't been sent before
-                    if current_response.startswith(full_response) and current_response != full_response:
-                        new_content = current_response[len(full_response):]
-                        logger.debug(f"[{request_id}] Yielding new content: {len(new_content)} chars")
+                    # Handle the first chunk specially
+                    if chunk_count == 1:
+                        logger.debug(f"[{request_id}] First chunk, yielding entire content")
                         full_response = current_response
-                        total_yielded_chars += len(new_content)
-                        yield new_content
-                    elif not current_response.startswith(full_response):
-                        # If there's an inconsistency, yield the whole chunk
-                        # (this should be rare but handles edge cases)
-                        logger.warning(f"[{request_id}] Content inconsistency detected. Yielding full chunk.")
-                        logger.debug(f"[{request_id}] Previous content: '{full_response[:100]}...'")
-                        logger.debug(f"[{request_id}] Current content: '{current_response[:100]}...'")
-                        full_response = current_response
-                        total_yielded_chars += len(current_response)
+                        total_yielded_chars += current_len
                         yield current_response
                     else:
-                        logger.debug(f"[{request_id}] No new content in this chunk")
+                        # For subsequent chunks, only yield the new content
+                        prev_len = len(full_response)
+                        
+                        # Check if this response is longer than what we've seen before
+                        if current_len > prev_len and current_response.startswith(full_response):
+                            # Extract only the new content
+                            new_content = current_response[prev_len:]
+                            new_content_len = len(new_content)
+                            
+                            if new_content_len > 0:
+                                logger.debug(f"[{request_id}] Yielding new content: {new_content_len} chars")
+                                full_response = current_response
+                                total_yielded_chars += new_content_len
+                                yield new_content
+                            else:
+                                logger.debug(f"[{request_id}] No new content to yield")
+                        elif current_response != full_response:
+                            # Handle inconsistency (rare case)
+                            logger.warning(f"[{request_id}] Content inconsistency detected")
+                            logger.debug(f"[{request_id}] Previous content: '{full_response[:50]}...'")
+                            logger.debug(f"[{request_id}] Current content: '{current_response[:50]}...'")
+                            
+                            # Try to find where they diverge and only yield the new part
+                            # Find the common prefix
+                            common_len = 0
+                            min_len = min(prev_len, current_len)
+                            
+                            for i in range(min_len):
+                                if full_response[i] != current_response[i]:
+                                    break
+                                common_len += 1
+                            
+                            if common_len > 0 and common_len < current_len:
+                                # Yield only the new part after the common prefix
+                                new_content = current_response[common_len:]
+                                logger.debug(f"[{request_id}] Yielding divergent content from position {common_len}: {len(new_content)} chars")
+                                full_response = current_response
+                                total_yielded_chars += len(new_content)
+                                yield new_content
+                            else:
+                                # Fallback: yield the whole new response
+                                logger.debug(f"[{request_id}] Yielding entire new content due to major divergence")
+                                full_response = current_response
+                                total_yielded_chars += current_len
+                                yield current_response
+                        else:
+                            logger.debug(f"[{request_id}] No new content in this chunk")
+
                 else:
                     logger.debug(f"[{request_id}] Chunk #{chunk_count}: empty content")
             
