@@ -125,11 +125,21 @@ def parse_document_id(doc_id: str, project, ctx = None) -> Tuple[Optional[str], 
                 if ctx:
                     debug_echo(ctx, f"Found potential region specifier (legacy format): {region} in remaining part: {remaining}")
                     
-            # 检查是否是模块资源路径（如 REQ/items, REQ/modules 等）
-            if not raw_id and region in ['items', 'modules', 'tags', 'all']:
-                if ctx:
-                    debug_echo(ctx, f"Detected module resource path: {prefix}/{region}")
-                return prefix, region, prefix, None
+            # 检查是否是模块资源路径（如 REQ/item, REQ/module 等）
+            resource_types = {
+                'item': ['item', 'items'],
+                'module': ['module', 'modules'],
+                'tag': ['tag', 'tags'],
+                'template': ['template', 'templates'],
+            }
+            
+            # 检查是否是支持的资源类型
+            for resource_type, aliases in resource_types.items():
+                if not raw_id and region in aliases:
+                    if ctx:
+                        debug_echo(ctx, f"Detected module resource path: {prefix}/{region}")
+                    # 返回标准化的资源类型（单数形式）
+                    return prefix, resource_type, prefix, None
             
             # Format the ID according to module settings
             digits = settings.get('digits', 3)  # Default to 3 digits

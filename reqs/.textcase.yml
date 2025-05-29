@@ -1,7 +1,13 @@
-modules: {}
+modules:
+  REQ:
+    BDD: tests_bdd
+    TST: tests
 settings:
   default_tag: []
   digits: 3
   prefix: REQ
   sep: ''
-tags: {}
+tags: 
+  - TODO
+  - DOING
+  - DONE
