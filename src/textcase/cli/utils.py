@@ -41,7 +41,8 @@ def parse_document_id(doc_id: str, project, ctx = None) -> Tuple[Optional[str], 
     
     This function handles document IDs in various formats:
     - PREFIX[ID] (e.g., REQ001, TST42)
-    - PREFIX[ID]:REGION (e.g., REQ001:meta, TST42:content)
+    - PREFIX[ID]/REGION (e.g., REQ001/meta, TST42/content)
+    - PREFIX/RESOURCE (e.g., REQ/items, REQ/modules, REQ/tags)
     
     It uses a right-to-left matching approach to find the longest prefix
     that matches an existing module.
@@ -54,8 +55,8 @@ def parse_document_id(doc_id: str, project, ctx = None) -> Tuple[Optional[str], 
     Returns:
         Tuple of (module_prefix, item_id, formatted_id, region) or (None, None, None, None) if not found
         - module_prefix: The prefix of the module (e.g., 'REQ')
-        - item_id: The ID part without formatting (e.g., '1')
-        - formatted_id: The full formatted ID (e.g., 'REQ001')
+        - item_id: The ID part without formatting (e.g., '1'), or resource type for module resources
+        - formatted_id: The full formatted ID (e.g., 'REQ001'), or module prefix for module resources
         - region: The region specifier if present (e.g., 'meta', 'content'), or None
     """
     if ctx:
@@ -106,13 +107,29 @@ def parse_document_id(doc_id: str, project, ctx = None) -> Tuple[Optional[str], 
             # Now check if there's a region specifier in the remaining part
             raw_id = remaining
             
-            if ':' in remaining:
-                parts = remaining.split(':', 1)
+            # 支持两种分隔符：'/' 和 ':'
+            # 优先使用 '/' 作为分隔符，如果没有则尝试 ':'
+            if '/' in remaining:
+                parts = remaining.split('/', 1)
                 raw_id = parts[0]
                 region = parts[1] # 不能改大小写，因为 region 实际是定位到 document 的 path.
                 
                 if ctx:
                     debug_echo(ctx, f"Found potential region specifier: {region} in remaining part: {remaining}")
+            elif ':' in remaining:
+                # 向后兼容，支持旧的 ':' 分隔符
+                parts = remaining.split(':', 1)
+                raw_id = parts[0]
+                region = parts[1] # 不能改大小写，因为 region 实际是定位到 document 的 path.
+                
+                if ctx:
+                    debug_echo(ctx, f"Found potential region specifier (legacy format): {region} in remaining part: {remaining}")
+                    
+            # 检查是否是模块资源路径（如 REQ/items, REQ/modules 等）
+            if not raw_id and region in ['items', 'modules', 'tags', 'all']:
+                if ctx:
+                    debug_echo(ctx, f"Detected module resource path: {prefix}/{region}")
+                return prefix, region, prefix, None
             
             # Format the ID according to module settings
             digits = settings.get('digits', 3)  # Default to 3 digits
