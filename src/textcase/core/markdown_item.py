@@ -168,15 +168,45 @@ class MarkdownItem(FileDocumentItem):
         if region:
             region_parts = [part.strip() for part in region.split('/')]
         else:
-            region_parts = []
+            # Default to "Task" if region is empty
+            # region = "Task"
+            region_parts = ["Task"]
             
         # Find the target heading based on region path
         target_heading = self._find_heading_by_path(ast, region_parts)
         
         if not target_heading:
-            # If heading not found, return False
+            # If heading not found
             print(f"DEBUG: Heading not found for region path: {region_parts}")
-            return False
+            
+            # Special case: If region is "Task" (default) and heading not found, append it
+            if not region and len(region_parts) == 1 and region_parts[0] == "Task":
+                print(f"DEBUG: Creating 'Task' heading at the end of the document")
+                
+                # Append the Task heading to the end of the document
+                lines = markdown_content.splitlines()
+                
+                # Add an empty line before the heading if the document doesn't end with one
+                if lines and lines[-1].strip():
+                    lines.append("")
+                    
+                # Add the Task heading
+                lines.append("## Task")
+                
+                # Add an empty line after the heading for the task list
+                lines.append("")
+                
+                # Create a basic heading node for further processing
+                target_heading = HeadingNode(text="Task", level=2, line=len(lines) - 2)
+                
+                # Update the markdown content
+                markdown_content = '\n'.join(lines)
+                
+                # Re-parse the AST with the new heading
+                ast = parse_markdown(markdown_content, debug=True)
+            else:
+                # For other regions, return False if heading not found
+                return False
             
         # Generate the link text (without task list marker)
         link_text = f"[{target.key}]({target.path.name}) {label or ''}".rstrip()
@@ -251,32 +281,54 @@ class MarkdownItem(FileDocumentItem):
             print(f"DEBUG: Found existing task list, inserting at line: {position}")
             lines.insert(position, f"- [ ] {link_text}")
         else:
-            # No task list found, create a new one at the end of the section content
-            # Find the end of the section content (before the next heading or EOF)
-            section_end_line = -1
+            # No task list found, create a new one right after the heading
+            # Find the actual heading line in the file
+            actual_heading_line = self._find_actual_heading_line(lines, target_heading)
+            if actual_heading_line == -1:
+                actual_heading_line = target_heading.line
+                print(f"DEBUG: Using token-based heading line: {actual_heading_line}")
+            else:
+                print(f"DEBUG: Found actual heading line: {actual_heading_line}")
             
-            # Find the target section to determine its end
-            for section in ast.children:
-                if isinstance(section, SectionNode) and section.heading:
-                    # Compare the heading text, normalizing case
-                    if section.heading.text.lower() == target_heading.text.lower():
-                        # If there's a next section, use its line as the end
-                        section_index = ast.children.index(section)
-                        if section_index < len(ast.children) - 1:
-                            next_section = ast.children[section_index + 1]
-                            if isinstance(next_section, SectionNode) and next_section.heading:
-                                section_end_line = next_section.heading.line - 1
-                        break
+            # Find the best position to insert the task list
+            # First check if there's any content after the heading
+            has_content_after_heading = False
+            content_end_line = actual_heading_line + 1
             
-            # If we couldn't find the section end, default to the end of the file
-            if section_end_line == -1:
-                section_end_line = len(lines) - 1
+            # Find the end of the current section (next heading or end of file)
+            section_end_line = len(lines)
+            for i in range(actual_heading_line + 1, len(lines)):
+                if lines[i].strip().startswith('#'):
+                    section_end_line = i
+                    break
             
-            # Insert at the end of the section content
-            position = section_end_line
-            print(f"DEBUG: No task list found, creating new one at the end of section content at line: {position}")
+            # Check if there's any non-empty content after the heading
+            for i in range(actual_heading_line + 1, section_end_line):
+                if lines[i].strip() and not lines[i].strip().startswith('- [ ]') and not lines[i].strip().startswith('- [x]'):
+                    has_content_after_heading = True
+                    content_end_line = i + 1
+            
+            # Determine the position to insert the task list
+            if has_content_after_heading:
+                # Insert after the content
+                position = content_end_line
+                print(f"DEBUG: Content found after heading, inserting task list after content at line: {position}")
+            else:
+                # Insert right after the heading
+                position = actual_heading_line + 1
+                print(f"DEBUG: No content after heading, inserting task list right after heading at line: {position}")
+            
+            # If the line at the insertion position is not empty and we're not at the end of the file,
+            # add an empty line first
+            if position < len(lines) and lines[position].strip():
+                print(f"DEBUG: Adding empty line at insertion point: {position}")
+                lines.insert(position, "")
+                position += 1
+            
+            print(f"DEBUG: No task list found, creating new one at line: {position}")
             lines.insert(position, "")
-            lines.insert(position + 1, f"- [ ] {link_text}")
+            position += 1
+            lines.insert(position, f"- [ ] {link_text}")
             
         # Reconstruct the markdown content
         post.content = '\n'.join(lines)
