@@ -44,12 +44,8 @@ def list_module_items(module: Module, ctx: click.Context) -> None:
     # Get all items in the module
     items = []
     if hasattr(module, 'path') and module.path.exists():
-        # Get the configured extension or default to .md
-        extension = module.config.settings.get('extension', '.md') if hasattr(module, 'config') else '.md'
-        
         for item in module.path.iterdir():
-            # Check if the file has the configured extension or common markdown extensions
-            if item.is_file() and (item.suffix.lower() == extension.lower() or item.suffix.lower() in ['.md', '.markdown']):
+            if item.is_file() and item.suffix.lower() in ['.md', '.markdown']:
                 # Check if the file matches the module's prefix pattern
                 if item.stem.upper().startswith(prefix):
                     items.append(item)
@@ -64,8 +60,12 @@ def list_module_items(module: Module, ctx: click.Context) -> None:
     # Display the items
     click.echo(f"Items in module '{prefix}':")
     for item in items:
-        # Extract the item ID from the filename
+        # Extract the item ID from the filename, removing any extension
         item_id = item.stem
+        
+        # If the item_id contains a secondary extension (like .msg in CHAT001.msg), remove it
+        if '.' in item_id:
+            item_id = item_id.split('.')[0]
         
         # Try to get the title from the file
         title = ""

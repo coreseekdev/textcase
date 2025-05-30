@@ -58,6 +58,19 @@ class Agent:
         # Cache for providers
         self._provider_cache = {}
         
+    def get_definition(self) -> str:
+        """
+        Get the agent's definition as a string in markdown format with YAML frontmatter.
+        
+        Returns:
+            String containing the agent's definition in markdown format with YAML frontmatter
+        """
+        # Create the frontmatter post
+        post = frontmatter.Post(self.system_prompt, **self.config)
+        
+        # Convert to string
+        return frontmatter.dumps(post)
+        
     async def generate(self, prompt: str, **kwargs) -> LLMResponse:
         """
         Generate a response using the agent's configuration.
@@ -277,7 +290,7 @@ class AgentFactory:
             }
             
             # Create new agent with empty system prompt
-            agent = Agent(project, None, "", config)
+            agent = Agent(project, None, "You are a helpful AI assistant.", config)
             
             # Cache the agent
             cls._agents[cache_key] = agent
