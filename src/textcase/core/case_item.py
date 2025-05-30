@@ -22,9 +22,11 @@ def create_case_item(prefix: str, id: str, settings: Dict[str, Any] = None, path
     Returns:
         An appropriate CaseItem implementation
     """
-    # For now, we only support markdown files
-    # path 的扩展名应该作为全局配置项
-    if path and path.suffix.lower() in ('.md', '.markdown'):
+    # Check if path exists and has a supported extension
+    markdown_extensions = ['.md', '.markdown']
+    
+    # If path is provided, use its extension to determine the item type
+    if path and path.suffix.lower() in markdown_extensions:
         return MarkdownItem(id=id, prefix=prefix, settings=settings or {}, path=path)
     
     # Default to MarkdownItem for now, even without a path

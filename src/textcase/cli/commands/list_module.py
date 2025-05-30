@@ -44,8 +44,12 @@ def list_module_items(module: Module, ctx: click.Context) -> None:
     # Get all items in the module
     items = []
     if hasattr(module, 'path') and module.path.exists():
+        # Get the configured extension or default to .md
+        extension = module.config.settings.get('extension', '.md') if hasattr(module, 'config') else '.md'
+        
         for item in module.path.iterdir():
-            if item.is_file() and item.suffix.lower() in ['.md', '.markdown']:
+            # Check if the file has the configured extension or common markdown extensions
+            if item.is_file() and (item.suffix.lower() == extension.lower() or item.suffix.lower() in ['.md', '.markdown']):
                 # Check if the file matches the module's prefix pattern
                 if item.stem.upper().startswith(prefix):
                     items.append(item)

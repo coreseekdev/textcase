@@ -101,9 +101,12 @@ def validate_item_id(ctx: click.Context, module: Module, name: str) -> Tuple[boo
         # Use name as is for string names
         formatted_id = name
     
+    # Get the configured extension or default to .md
+    extension = settings.get('extension', '.md')
+    
     # Check if an item with this ID already exists
     full_id = f"{prefix}{sep}{formatted_id}"
-    file_path = module.path / f"{full_id}.md"
+    file_path = module.path / f"{full_id}{extension}"
     
     # Use _vfs attribute which is available in both YamlModule and _YamlProject
     if module._vfs.exists(file_path):
@@ -196,7 +199,8 @@ def add(ctx: click.Context, module_prefix: str, name: Optional[str] = None, quie
     
     # Create the full ID with prefix and separator
     full_id = f"{prefix}{sep}{item_id}"
-    file_path = module.path / f"{full_id}.md"
+    extension = settings.get('extension', '.md')  # Get configured extension or default to .md
+    file_path = module.path / f"{full_id}{extension}"
     
     debug_echo(ctx, f"Creating case item at {file_path}")
     

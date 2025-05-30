@@ -31,11 +31,12 @@ from textcase.cli.utils import debug_echo, copy_templates_to_project
 @click.option('--parent', help='Parent module prefix (required for submodules)')
 @click.option('-s', '--sep', help='Separator between prefix and ID (e.g., "-" for REQ-001)')
 @click.option('--digits', type=int, help='Number of digits for IDs (e.g., 3 for REQ001, 4 for REQ0001)')
+@click.option('--extension', help='File extension for documents (e.g., ".md", ".chat")')
 @click.option('--settings', help='Additional module settings in format key1=value1,key2=value2')
 @click.option('--tags', help='Module tags in format tag1=description1,tag2=description2')
 @click.pass_context
 def create(ctx: click.Context, prefix: str, module_path: Path, parent: Optional[str] = None, 
-         sep: Optional[str] = None, digits: Optional[int] = None,
+         sep: Optional[str] = None, digits: Optional[int] = None, extension: Optional[str] = None,
          settings: Optional[str] = None, tags: Optional[str] = None):
     """Create a new module or submodule.
     
@@ -148,6 +149,9 @@ def create(ctx: click.Context, prefix: str, module_path: Path, parent: Optional[
             
         if digits is not None:
             default_settings['digits'] = digits
+            
+        if extension is not None:
+            default_settings['extension'] = extension
         
         # Parse and apply additional custom settings if provided
         if settings:

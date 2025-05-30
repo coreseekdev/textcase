@@ -254,13 +254,23 @@ class BaseModule(Module):
         # Get the document path if it exists
         doc_path = None
         if self.path:
-            # Try to find the document file with the correct extension
-            # FIXME: 如果 case item 有其他扩展名，需要修改这个列表， 应该作为全局配置项
-            for ext in ['.md', '.markdown']:
-                potential_path = self.path / f"{prefix}{settings.get('sep', '-')}{id}{ext}"
-                if self._vfs.exists(potential_path):
-                    doc_path = potential_path
-                    break
+            # Get the configured extension or default to .md
+            extension = settings.get('extension', '.md')
+            
+            # Try to find the document file with the configured extension
+            potential_path = self.path / f"{prefix}{settings.get('sep', '-')}{id}{extension}"
+            if self._vfs.exists(potential_path):
+                doc_path = potential_path
+            
+            # If not found with the configured extension, try common markdown extensions as fallback
+            if doc_path is None:
+                for ext in ['.md', '.markdown']:
+                    if ext == extension:
+                        continue  # Skip the extension we already checked
+                    potential_path = self.path / f"{prefix}{settings.get('sep', '-')}{id}{ext}"
+                    if self._vfs.exists(potential_path):
+                        doc_path = potential_path
+                        break
                     
         # Create the case item using the factory method
         return create_case_item(prefix, id, settings=settings, path=doc_path)
@@ -305,7 +315,8 @@ class YamlModule(BaseModule):
                 
             # Format the filename
             sep = settings.get('sep', '-')
-            filename = f"{prefix}{sep}{next_id}.md"
+            extension = settings.get('extension', '.md')
+            filename = f"{prefix}{sep}{next_id}{extension}"
             doc_path = self.path / filename
             
             # Set the path on the document item

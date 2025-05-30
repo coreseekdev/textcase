@@ -1,0 +1,7 @@
+settings:
+  default_tag: []
+  digits: 3
+  extension: .msg.md
+  prefix: CHAT
+  sep: ''
+tags: {}

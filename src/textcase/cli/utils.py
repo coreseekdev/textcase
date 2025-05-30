@@ -209,7 +209,10 @@ def get_document_item(doc_id: str, project, ctx = None) -> Tuple[Optional[Docume
         
         # Set the path if needed
         if hasattr(case_item, 'path') and case_item.path is None:
-            doc_path = target_module.path / f"{formatted_id}.md"
+            # Get the configured extension or default to .md
+            settings = target_module.config.settings
+            extension = settings.get('extension', '.md')
+            doc_path = target_module.path / f"{formatted_id}{extension}"
             case_item.path = doc_path
         
         if ctx:
@@ -257,8 +260,12 @@ def get_document_path(doc_id: str, project, ctx = None) -> Tuple[Optional[Path],
             debug_echo(ctx, f"Could not find module for prefix: {module_prefix}")
         return None, None, None, region
     
+    # Get the configured extension or default to .md
+    settings = target_module.config.settings
+    extension = settings.get('extension', '.md')
+    
     # Create the file path
-    file_path = target_module.path / f"{formatted_id}.md"
+    file_path = target_module.path / f"{formatted_id}{extension}"
     
     if ctx:
         debug_echo(ctx, f"Resolved file path: {file_path}")

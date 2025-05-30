@@ -68,8 +68,12 @@ class YamlOrder(ModuleOrder):
             The creation time as a float, or infinity if not available.
         """
         try:
-            # Get the filename from the CaseItem
-            filename = f"{item.key}.md"  # Assuming .md extension, adjust if needed
+            # Get the configured extension or default to .md
+            settings = self._module.config.settings
+            extension = settings.get('extension', '.md')
+            
+            # Get the filename from the CaseItem with the configured extension
+            filename = f"{item.key}{extension}"
             stat = self.vfs.stat(self.path / filename)
             return stat.st_ctime
         except Exception:
@@ -337,11 +341,12 @@ class YamlOrder(ModuleOrder):
         # Get formatting parameters
         digits = settings.get('digits', 3)  # Default to 3 digits
         separator = settings.get('sep', '')  # Default to no separator
+        extension = settings.get('extension', '.md')  # Get configured extension or default to .md
         
-        # Find all files that match the pattern: prefix + separator + digits + .md
+        # Find all files that match the pattern: prefix + separator + digits + extension
         # Example: REQ001.md or REQ-001.md depending on separator
         max_id = 0
-        pattern = f"^{re.escape(prefix)}{re.escape(separator)}(\\d+)\.md$"
+        pattern = f"^{re.escape(prefix)}{re.escape(separator)}(\\d+){re.escape(extension)}$"
         
         try:
             # List all files in the directory

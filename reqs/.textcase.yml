@@ -1,13 +1,15 @@
 modules:
   REQ:
     BDD: tests_bdd
+    CHAT: chat
     TST: tests
 settings:
   default_tag: []
   digits: 3
+  extension: .md
   prefix: REQ
   sep: ''
-tags: 
-  - TODO
-  - DOING
-  - DONE
+tags:
+- TODO
+- DOING
+- DONE

@@ -194,8 +194,12 @@ def edit(ctx: click.Context, doc_id: str):
         temp_dir = Path(tempfile.mkdtemp(prefix='textcase_edit_'))
         
         try:
-            # Create a temporary file for editing
-            temp_file = temp_dir / 'temp_doc.md'
+            # Get the configured extension or default to .md
+            settings = module.config.settings
+            extension = settings.get('extension', '.md')
+            
+            # Create a temporary file for editing with the configured extension
+            temp_file = temp_dir / f'temp_doc{extension}'
             
             # If document exists, read its content, otherwise create with a title
             if file_path.exists():
