@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 # Message protocol
 from .message import (
-    MessageFile, Message, MessageOutput,
+    MessageStore, Message, MessageOutput,
     FunctionCall
 )
 

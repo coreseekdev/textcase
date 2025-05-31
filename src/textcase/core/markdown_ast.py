@@ -38,7 +38,31 @@ class RootNode(MarkdownNode):
     def __init__(self):
         super().__init__('root', 0)
         # Additional metadata about the document
-        self.metadata = {}
+        self.metadata = {
+            'frontmatter': {},
+            'footnotes': {}
+        }
+        
+    def add_frontmatter(self, data: Dict[str, Any]) -> None:
+        """Add frontmatter data to the root node."""
+        self.metadata['frontmatter'].update(data)
+        
+    def add_footnote(self, id: str, content: str, line: int, footnote_type: str = None, attributes: Dict[str, Any] = None) -> None:
+        """Add a footnote to the root node.
+        
+        Args:
+            id: The footnote ID (e.g., "^1")
+            content: The full footnote content
+            line: The line number where the footnote appears
+            footnote_type: Optional type extracted from the footnote (e.g., "message", "function_call")
+            attributes: Parsed attributes from the footnote
+        """
+        self.metadata['footnotes'][id] = {
+            'content': content,
+            'line': line,
+            'type': footnote_type,
+            'attributes': attributes or {}
+        }
 
 
 class HeadingNode(MarkdownNode):
@@ -209,6 +233,93 @@ class CodeBlockNode(MarkdownNode):
         return result
 
 
+def process_metadata_tokens(tokens: List[Any], root: RootNode, debug: bool = False) -> None:
+    """Process metadata tokens such as front matter and footnotes.
+    
+    Args:
+        tokens: List of markdown-it tokens
+        root: Root node of the AST
+        debug: Whether to print debug information
+        
+    This function processes special tokens from the enabled plugins:
+    - Front-Matter: Extracts YAML frontmatter data
+    - Footnotes: Processes footnote references and definitions
+    - Task Lists: Identifies task list items with checkboxes
+    """
+    import re
+    
+    # Regular expression for footnotes
+    # Matches patterns like [^1]: [message] name="foo" timeout=30
+    FOOTNOTE_PATTERN = re.compile(r'\[([\^\d]+)\]:\s*(?:\[([^\]]+)\])?\s*(.*)')
+    
+    # Regular expression for footnote attributes
+    # Matches name="value" or name=value patterns
+    FOOTNOTE_ATTR_PATTERN = re.compile(r'(\w+)=(?:"([^"]*)"|([^\s]*))')
+    
+    # Process front matter
+    for token in tokens:
+        # Front matter is stored in the meta property of the token
+        if hasattr(token, 'meta') and token.meta:
+            if debug:
+                print(f"DEBUG: Found front matter: {token.meta}")
+            root.add_frontmatter(token.meta)
+        
+        # Process footnote_reference tokens (from the footnote plugin)
+        if token.type == 'footnote_reference':
+            if debug:
+                print(f"DEBUG: Found footnote reference: {token.content}")
+        
+        # Process footnote_anchor tokens (from the footnote plugin)
+        if token.type == 'footnote_anchor':
+            if debug:
+                print(f"DEBUG: Found footnote anchor: {token.content}")
+        
+        # Process footnote_open tokens (from the footnote plugin)
+        if token.type == 'footnote_open':
+            if debug:
+                print(f"DEBUG: Found footnote open: {token.content}")
+        
+        # Process inline tokens for custom footnote format
+        if token.type == 'inline' and token.content and '[^' in token.content and ']:' in token.content:
+            footnote_match = FOOTNOTE_PATTERN.match(token.content)
+            if footnote_match:
+                footnote_id = footnote_match.group(1)  # e.g., ^1
+                footnote_type = footnote_match.group(2)  # e.g., message, function_call
+                footnote_attrs_text = footnote_match.group(3)  # e.g., name="foo" timeout=30
+                
+                # Parse attributes
+                attrs = {}
+                for attr_match in FOOTNOTE_ATTR_PATTERN.finditer(footnote_attrs_text):
+                    attr_name = attr_match.group(1)
+                    # Use quoted value if available, otherwise use unquoted value
+                    attr_value = attr_match.group(2) if attr_match.group(2) is not None else attr_match.group(3)
+                    
+                    # Convert special values
+                    if attr_value.lower() == "true":
+                        attr_value = True
+                    elif attr_value.lower() == "false":
+                        attr_value = False
+                    elif attr_value.isdigit():
+                        attr_value = int(attr_value)
+                    elif attr_value.replace(".", "", 1).isdigit() and attr_value.count(".") == 1:
+                        attr_value = float(attr_value)
+                    
+                    attrs[attr_name] = attr_value
+                
+                # Add footnote to root metadata
+                line_num = token.map[0] if hasattr(token, 'map') and token.map else -1
+                root.add_footnote(
+                    id=footnote_id,
+                    content=token.content,
+                    line=line_num,
+                    footnote_type=footnote_type,
+                    attributes=attrs
+                )
+                
+                if debug:
+                    print(f"DEBUG: Found footnote: id={footnote_id}, type={footnote_type}, attrs={attrs}")
+
+
 def parse_markdown(content: str, debug: bool = False) -> RootNode:
     """Parse markdown content into an AST.
     
@@ -219,7 +330,26 @@ def parse_markdown(content: str, debug: bool = False) -> RootNode:
     Returns:
         A RootNode containing the parsed Markdown AST
     """
-    md = MarkdownIt()
+    # Import plugins from mdit-py-plugins if available
+    try:
+        from mdit_py_plugins.front_matter import front_matter_plugin
+        from mdit_py_plugins.footnote import footnote_plugin
+        from mdit_py_plugins.tasklists import tasklists_plugin
+        
+        # Initialize MarkdownIt with plugins
+        md = MarkdownIt()
+        md.use(front_matter_plugin)
+        md.use(footnote_plugin)
+        md.use(tasklists_plugin)
+        
+        if debug:
+            print("DEBUG: Using mdit-py-plugins for enhanced parsing")
+    except ImportError:
+        # Fallback to basic MarkdownIt if plugins are not available
+        md = MarkdownIt()
+        if debug:
+            print("DEBUG: mdit-py-plugins not available, using basic parser")
+    
     tokens = md.parse(content)
     lines = content.splitlines()
     
@@ -230,6 +360,9 @@ def parse_markdown(content: str, debug: bool = False) -> RootNode:
     
     # Create the root node
     root = RootNode()
+    
+    # Process front matter and footnotes from tokens
+    process_metadata_tokens(tokens, root, debug)
     
     # First pass: collect all headings
     headings = []
@@ -436,118 +569,3 @@ def parse_markdown(content: str, debug: bool = False) -> RootNode:
     
     return root
 
-
-def ast_to_dict(ast: RootNode) -> Dict[str, Any]:
-    """Convert an AST to a dictionary representation.
-    
-    This is useful for backward compatibility with code that expects
-    the old dictionary-based representation.
-    
-    Args:
-        ast: The AST to convert
-        
-    Returns:
-        A dictionary representation of the AST
-    """
-    result = {
-        'headings': [],
-        'links': [],
-        'images': [],
-        'code_blocks': [],
-        'sections': [],
-        'list_blocks': [],
-        'task_lists': []
-    }
-    
-    # Helper function to recursively process nodes
-    def process_node(node, parent_heading=None):
-        if node.type == 'heading':
-            result['headings'].append({
-                'level': node.level,
-                'text': node.text,
-                'line': node.line,
-                'token_index': node.token_index
-            })
-        elif node.type == 'section':
-            result['sections'].append({
-                'heading': {
-                    'level': node.heading.level,
-                    'text': node.heading.text,
-                    'line': node.heading.line,
-                    'token_index': node.heading.token_index
-                },
-                'start_line': node.start_line,
-                'end_line': node.end_line,
-                'content': []  # Would need actual content lines here
-            })
-            # Process children with this section's heading as parent
-            for child in node.children:
-                process_node(child, node.heading)
-        elif node.type == 'link':
-            result['links'].append({
-                'url': node.url,
-                'text': node.text,
-                'line': node.line
-            })
-        elif node.type == 'image':
-            result['images'].append({
-                'url': node.url,
-                'alt': node.alt,
-                'line': node.line
-            })
-        elif node.type == 'code_block':
-            result['code_blocks'].append({
-                'content': node.content,
-                'info': node.language,
-                'line': node.line
-            })
-        elif node.type == 'list':
-            list_data = {
-                'start_line': node.start_line,
-                'end_line': node.end_line,
-                'items': []
-            }
-            
-            # Add items
-            for child in node.children:
-                if child.type == 'list_item':
-                    item_data = {
-                        'text': child.text,
-                        'line': child.line
-                    }
-                    
-                    if child.is_task:
-                        item_data['checked'] = child.is_checked
-                        
-                    if child.has_link:
-                        item_data['has_link'] = True
-                        item_data['link_url'] = child.link_url
-                        item_data['link_text'] = child.link_text
-                        
-                    list_data['items'].append(item_data)
-            
-            # Add parent heading if available
-            if parent_heading:
-                list_data['parent_heading'] = {
-                    'level': parent_heading.level,
-                    'text': parent_heading.text,
-                    'line': parent_heading.line,
-                    'token_index': parent_heading.token_index
-                }
-            
-            # Add to appropriate list based on type
-            if node.list_type == 'task':
-                result['task_lists'].append(list_data)
-            else:
-                result['list_blocks'].append(list_data)
-        
-        # Process children for non-section nodes
-        if node.type != 'section':
-            for child in node.children:
-                process_node(child, parent_heading)
-    
-    # Process all root children
-    for child in ast.children:
-        process_node(child)
-    
-    return result
