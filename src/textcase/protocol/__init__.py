@@ -24,6 +24,18 @@ from .message import (
     FunctionCall
 )
 
+# LLM protocol
+from .llm import (
+    LLMResponseProtocol,
+    LLMProviderProtocol
+)
+
+# Agent protocol
+from .agent import (
+    AgentProtocol,
+    AgentFactoryProtocol
+)
+
 # VFS protocol
 from .vfs import VFS, FileHandle, FileStat, FileSeek, TempDir
 
@@ -51,4 +63,12 @@ __all__ = [
     'ModuleConfig',
     'ModuleOrder',
     'ModuleTags',
+    
+    # LLM related
+    'LLMResponseProtocol',
+    'LLMProviderProtocol',
+    
+    # Agent related
+    'AgentProtocol',
+    'AgentFactoryProtocol',
 ]

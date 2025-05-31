@@ -16,6 +16,7 @@ from humbug.ai.ai_message import AIMessage, AIMessageSource
 from textcase.core.llm.conversation_settings import TextcaseConversationSettings
 
 from textcase.core.llm.provider import LLMProvider, LLMResponse
+from textcase.protocol import LLMProviderProtocol, LLMResponseProtocol
 from textcase.core.logging import get_logger
 
 # Get logger for this module
@@ -23,7 +24,10 @@ logger = get_logger(__name__)
 
 
 class HumbugProvider(LLMProvider):
-    """Humbug-based LLM provider implementation."""
+    """Humbug-based LLM provider implementation.
+    
+    This class implements the LLMProviderProtocol interface.
+    """
     
     def __init__(self, provider_name: str, backend_settings: Dict[str, AIBackendSettings]):
         """

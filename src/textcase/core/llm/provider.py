@@ -9,6 +9,8 @@ import jinja2
 import jinja2.meta
 from pathlib import Path
 
+from textcase.protocol import LLMResponseProtocol, LLMProviderProtocol
+
 
 class LLMResponse:
     """Response from an LLM."""
@@ -20,7 +22,10 @@ class LLMResponse:
 
 
 class LLMProvider(ABC):
-    """Abstract base class for LLM providers."""
+    """Abstract base class for LLM providers.
+    
+    This class implements the LLMProviderProtocol interface.
+    """
     
     @abstractmethod
     async def generate(self, prompt: str, model: str, **kwargs) -> LLMResponse:

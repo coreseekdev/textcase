@@ -2,9 +2,12 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Union, Tuple, overload, Protocol, TypeVar, Generic
+from typing import Dict, List, Optional, Any, Union, Protocol, TypeVar, Generic, runtime_checkable
+
+from .agent import AgentProtocol, AgentFactoryProtocol
 
 
+@runtime_checkable
 class MessageOutput(Protocol):
     """Protocol for message outputs in a message file."""
     
@@ -23,62 +26,49 @@ class MessageOutput(Protocol):
         """Get the unique identifier for the output."""
         ...
     
-    @abstractmethod
     def to_dict(self) -> Dict[str, Any]:
         """Convert the output to a dictionary."""
         ...
 
 
-class MessageOutputBuilder(Protocol):
-    """Builder for creating MessageOutput instances."""
+@runtime_checkable
+class CodeExecutionOutput(MessageOutput, Protocol):
+    """Protocol for code execution outputs in a message file."""
     
-    @abstractmethod
-    def with_content(self, content: str) -> 'MessageOutputBuilder':
-        """Set the content of the output."""
+    @property
+    def stdout_content(self) -> str:
+        """Get the standard output content."""
         ...
     
-    @abstractmethod
-    def with_mime_type(self, mime_type: str) -> 'MessageOutputBuilder':
-        """Set the MIME type of the content."""
+    @property
+    def stderr_content(self) -> str:
+        """Get the standard error content."""
         ...
     
-    @abstractmethod
-    def with_nonce(self, nonce: str) -> 'MessageOutputBuilder':
-        """Set the unique identifier for the output."""
+    @property
+    def status(self) -> int:
+        """Get the execution status code."""
         ...
     
-    @abstractmethod
-    def build(self) -> MessageOutput:
-        """Build and return a MessageOutput instance."""
+    @property
+    def duration(self) -> float:
+        """Get the execution duration in seconds."""
+        ...
+    
+    @property
+    def lang(self) -> str:
+        """Get the programming language of the executed code."""
+        ...
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the code execution output to a dictionary."""
         ...
 
 
 T_MessageItem = TypeVar('T_MessageItem', bound='MessageItem')
 
-class MessageItemBuilder(Generic[T_MessageItem]):
-    """Base builder for message items."""
-    
-    @abstractmethod
-    def with_name(self, name: str) -> 'MessageItemBuilder[T_MessageItem]':
-        """Set the name of the message item."""
-        ...
-    
-    @abstractmethod
-    def with_timeout(self, timeout: int) -> 'MessageItemBuilder[T_MessageItem]':
-        """Set the timeout in seconds."""
-        ...
-    
-    @abstractmethod
-    def with_output(self, output: MessageOutput) -> 'MessageItemBuilder[T_MessageItem]':
-        """Add an output to the message item."""
-        ...
-    
-    @abstractmethod
-    def build(self) -> T_MessageItem:
-        """Build and return a MessageItem instance."""
-        ...
 
-
+@runtime_checkable
 class MessageItem(Protocol):
     """Protocol for message items (Message or FunctionCall)."""
     
@@ -101,63 +91,28 @@ class MessageItem(Protocol):
     def type(self) -> str:
         """Get the type of the message item."""
         ...
+        
+    @property
+    def history(self) -> List[Dict[str, Any]]:
+        """Get the history of the message item."""
+        ...
     
-    @abstractmethod
+    @property
+    def heading_level(self) -> Optional[int]:
+        """Get the heading level of the message item."""
+        ...
+    
     def add_output(self, output: MessageOutput) -> None:
         """Add an output to the message item."""
         ...
     
-    @abstractmethod
     def to_dict(self) -> Dict[str, Any]:
         """Convert the message item to a dictionary."""
         ...
 
 
-class FunctionCall(Protocol):
-    """Protocol for function calls in a message file."""
-    
-    @property
-    def function_name(self) -> str:
-        """Get the name of the function to call."""
-        ...
-    
-    @property
-    def args(self) -> Dict[str, Any]:
-        """Get the arguments for the function."""
-        ...
-    
-    @property
-    def name(self) -> Optional[str]:
-        """Get the name of the function call."""
-        ...
-    
-    @property
-    def timeout(self) -> Optional[int]:
-        """Get the timeout in seconds."""
-        ...
-    
-    @property
-    def outputs(self) -> List[MessageOutput]:
-        """Get the outputs of the function call."""
-        ...
-    
-    @property
-    def type(self) -> str:
-        """Get the type of the function call."""
-        ...
-    
-    @abstractmethod
-    def add_output(self, output: MessageOutput) -> None:
-        """Add an output to the function call."""
-        ...
-    
-    @abstractmethod
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert the function call to a dictionary."""
-        ...
-
-
-class Message(Protocol):
+@runtime_checkable
+class Message(MessageItem, Protocol):
     """Protocol for messages in a message file."""
     
     @property
@@ -175,116 +130,49 @@ class Message(Protocol):
         """Get the name of the agent that generated the message."""
         ...
     
-    @property
-    def name(self) -> Optional[str]:
-        """Get the name of the message."""
-        ...
-    
-    @property
-    def timeout(self) -> Optional[int]:
-        """Get the timeout in seconds."""
-        ...
-    
-    @property
-    def outputs(self) -> List[MessageOutput]:
-        """Get the outputs of the message."""
-        ...
-    
-    @property
-    def type(self) -> str:
-        """Get the type of the message."""
-        ...
-    
-    @abstractmethod
-    def add_output(self, output: MessageOutput) -> None:
-        """Add an output to the message."""
-        ...
-    
-    @abstractmethod
-    def add_function_call(self, function_call: FunctionCall) -> None:
+    def add_function_call(self, function_name: str, args: Optional[Dict[str, Any]] = None,
+                         name: Optional[str] = None, timeout: Optional[int] = None) -> 'FunctionCall':
         """Add a function call to the message."""
         ...
     
-    @abstractmethod
     def to_dict(self) -> Dict[str, Any]:
         """Convert the message to a dictionary."""
         ...
 
 
-# Factory methods for creating message items from dictionaries
-def create_message_item_from_dict(data: Dict[str, Any]) -> MessageItem:
-    """Create a message item from a dictionary.
+@runtime_checkable
+class FunctionCall(MessageItem, Protocol):
+    """Protocol for function calls in a message file."""
     
-    This is a factory method that creates the appropriate message item based on the data.
-    The concrete implementation will be provided by the concrete classes.
-    
-    Args:
-        data: The dictionary containing the message item data
-        
-    Returns:
-        A MessageItem instance (either Message or FunctionCall)
-    """
-    # Implementation will be provided by concrete classes
-    ...
-
-
-class FunctionCallBuilder(MessageItemBuilder['FunctionCall']):
-    """Builder for creating FunctionCall instances."""
-    
-    @abstractmethod
-    def with_function_name(self, function_name: str) -> 'FunctionCallBuilder':
-        """Set the name of the function to call."""
+    @property
+    def function_name(self) -> str:
+        """Get the name of the function."""
         ...
     
-    @abstractmethod
-    def with_args(self, args: Dict[str, Any]) -> 'FunctionCallBuilder':
-        """Set the arguments for the function."""
-        ...
-
-
-class MessageBuilder(MessageItemBuilder['Message']):
-    """Builder for creating Message instances."""
-    
-    @abstractmethod
-    def with_content(self, content: str) -> 'MessageBuilder':
-        """Set the content of the message."""
+    @property
+    def args(self) -> Dict[str, Any]:
+        """Get the arguments for the function."""
         ...
     
-    @abstractmethod
-    def with_mime_type(self, mime_type: str) -> 'MessageBuilder':
-        """Set the MIME type of the content."""
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the function call to a dictionary."""
         ...
-    
-    @abstractmethod
-    def with_agent_name(self, agent_name: str) -> 'MessageBuilder':
-        """Set the name of the agent that generated the message."""
-        ...
-    
-    @abstractmethod
-    def with_function_call(self, function_call: FunctionCall) -> 'MessageBuilder':
-        """Add a function call to the message."""
-        ...
-
-
-class MessageFile(ABC):
+@runtime_checkable
+class MessageStore(Protocol):
     """Protocol for message files."""
     
-    @abstractmethod
     def get_path(self) -> Path:
         """Get the path to the message file."""
         ...
     
-    @abstractmethod
     def get_items(self) -> List[MessageItem]:
         """Get all message items (messages and function calls) in the file."""
         ...
     
-    @abstractmethod
     def get_agents(self) -> List[Dict[str, Any]]:
         """Get all agents defined in the file."""
         ...
     
-    @abstractmethod
     def add_agent(self, agent_name: str, override_settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Add an agent to the message file.
@@ -298,7 +186,6 @@ class MessageFile(ABC):
         """
         ...
     
-    @abstractmethod
     def add_agent_with_definition(self, agent_name: str, definition: Dict[str, Any]) -> Dict[str, Any]:
         """
         Add an agent with a custom definition to the message file.
@@ -312,7 +199,6 @@ class MessageFile(ABC):
         """
         ...
     
-    @abstractmethod
     def set_default_agent(self, agent_name: str) -> None:
         """
         Set the default agent for the message file.
@@ -325,7 +211,6 @@ class MessageFile(ABC):
         """
         ...
     
-    @abstractmethod
     def default_agent(self) -> Optional[Dict[str, Any]]:
         """
         Get the default agent for the message file.
@@ -335,7 +220,6 @@ class MessageFile(ABC):
         """
         ...
     
-    @abstractmethod
     def add_message(self, content: str, name: Optional[str] = None, mime_type: str = "text/plain", 
                    agent_name: Optional[str] = None, timeout: Optional[int] = None) -> Message:
         """
@@ -356,7 +240,6 @@ class MessageFile(ABC):
         """
         ...
     
-    @abstractmethod
     def add_function_call(self, message_name: str, function_name: str, args: Optional[Dict[str, Any]] = None,
                          name: Optional[str] = None, timeout: Optional[int] = None) -> FunctionCall:
         """
@@ -374,7 +257,6 @@ class MessageFile(ABC):
         """
         ...
     
-    @abstractmethod
     def get_item(self, index_or_name: Union[int, str]) -> Optional[MessageItem]:
         """
         Get a message item by index or name.
@@ -387,12 +269,10 @@ class MessageFile(ABC):
         """
         ...
     
-    @abstractmethod
     def save(self) -> None:
         """Save the message file."""
         ...
     
-    @abstractmethod
     def load(self) -> None:
         """Load the message file from disk."""
         ...

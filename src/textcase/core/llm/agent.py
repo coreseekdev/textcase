@@ -15,6 +15,7 @@ from markdown_it import MarkdownIt
 
 from textcase.core.project import Project
 from textcase.core.llm import LLMResponse
+from textcase.protocol import AgentProtocol, AgentFactoryProtocol, LLMResponseProtocol
 from textcase.core.logging import get_logger
 
 # Get logger for this module
@@ -22,7 +23,10 @@ logger = get_logger(__name__)
 
 
 class Agent:
-    """LLM Agent implementation that manages model selection and inference."""
+    """LLM Agent implementation that manages model selection and inference.
+    
+    This class implements the AgentProtocol interface.
+    """
     
     def __init__(self, project: Project, agent_name: str = None, system_prompt: str = None, config: Dict[str, Any] = None):
         """
@@ -234,7 +238,10 @@ class Agent:
 
 
 class AgentFactory:
-    """Factory for creating Agent instances."""
+    """Factory for creating Agent instances.
+    
+    This class implements the AgentFactoryProtocol interface.
+    """
     
     _agents: Dict[str, Agent] = {}
     
