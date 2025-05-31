@@ -1,6 +1,5 @@
 modules:
   REQ:
-    BDD: tests_bdd
     CHAT: chat
     TST: tests
 settings:
