@@ -2,7 +2,7 @@ import pytest
 
 from textcase.parse.parser import Parser
 from textcase.parse.document_type import DocumentType
-from textcase.parse.resolver import ItemType
+from textcase.parse.resolver import NodeType
 from textcase.parse.resolver_md import MarkdownResolver
 from textcase.parse.document import Document
 
@@ -51,16 +51,16 @@ description: 这是一个测试文档
         # 测试 #meta 路径
         meta_parsed = resolver.parse_uri("#meta")
         assert meta_parsed is not None
-        assert meta_parsed["resource_type"] == "#meta"
+        assert meta_parsed == [("rtype", "#meta")]
         
         # 测试 #frontmatter 路径（应该被视为 #meta 的同义词）
         frontmatter_parsed = resolver.parse_uri("#frontmatter")
         assert frontmatter_parsed is not None
-        assert frontmatter_parsed["resource_type"] == "#meta"
+        assert frontmatter_parsed == [("rtype", "#meta")]
         
         # 测试 uri_to_query 方法
-        meta_query = resolver.uri_to_query("#meta")
-        frontmatter_query = resolver.uri_to_query("#frontmatter")
+        meta_query, _ = resolver.uri_to_query("#meta")
+        frontmatter_query, _ = resolver.uri_to_query("#frontmatter")
         
         # 两个查询应该相同
         assert meta_query == frontmatter_query
@@ -77,14 +77,13 @@ description: 这是一个测试文档
         
         # 检查 meta 项
         meta_item = meta_items[0]
-        assert meta_item.node_name == "frontmatter"
-        assert meta_item.item_type == ItemType.METADATA  # 使用 METADATA 类型
+        assert meta_item.node_type == NodeType.METADATA
         
         # 如果解析器成功解析了 frontmatter，文本应该包含实际的 frontmatter 内容
         # 检查处理后的元数据内容，应该去除了 --- 分隔符
-        assert "title: 测试文档" in meta_item.text
-        assert "description: 这是一个测试文档" in meta_item.text
-        assert "---" not in meta_item.text  # 确保分隔符被移除
+        assert "title: 测试文档" in meta_item.get_text(parsed_document)
+        assert "description: 这是一个测试文档" in meta_item.get_text(parsed_document)
+        assert "---" not in meta_item.get_text(parsed_document)  # 确保分隔符被移除
         
         # 检查位置信息是否正确
         assert meta_item.start_point == (0, 0)  # frontmatter 应该从文档开头开始
@@ -92,9 +91,8 @@ description: 这是一个测试文档
         
         # 检查 frontmatter 项（应该与 meta 项相同）
         frontmatter_item = frontmatter_items[0]
-        assert frontmatter_item.node_name == meta_item.node_name
-        assert frontmatter_item.item_type == meta_item.item_type
-        assert frontmatter_item.text == meta_item.text
+        assert frontmatter_item.node_type == meta_item.node_type
+        assert frontmatter_item.get_text(parsed_document) == meta_item.get_text(parsed_document)
 
 
 if __name__ == "__main__":

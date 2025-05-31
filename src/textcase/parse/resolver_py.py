@@ -7,11 +7,11 @@ Python 语言特定的 URI 解析器。
 import re
 from typing import Dict, List, Optional, Any, Tuple
 
-from .resolver import Resolver, DocumentItem, ItemType, ResolverProtocol
+from .resolver import SemanticNode, NodeType, ResolverProtocol
 from .document import DocumentProtocol
 
 
-class PythonResolver(Resolver, ResolverProtocol):
+class PythonResolver(ResolverProtocol):
     """
 Python 语言特定的 URI 解析器。
     
@@ -84,49 +84,49 @@ Python 语言特定的 URI 解析器。
         
         raise ValueError(f"不支持的资源类型或缺少必要参数: {resource_type}")
     
-    def _create_document_item(self, node_name: str, item_type: ItemType, text: str, 
-                             start_point: Tuple[int, int], end_point: Tuple[int, int], 
-                             metadata: Optional[Dict[str, Any]] = None,
-                             children: Optional[List[DocumentItem]] = None) -> DocumentItem:
-        """创建文档项。
+    def _create_semantic_node(self, node_name: str, node_type: NodeType, text: str, 
+                          start_point: Tuple[int, int], end_point: Tuple[int, int], 
+                          metadata: Optional[Dict[str, Any]] = None,
+                          children: Optional[List[SemanticNode]] = None) -> SemanticNode:
+        """创建语义节点。
         
         Args:
             node_name: 节点名称
-            item_type: 项目类型
-            text: 项目文本表示
+            node_type: 节点类型
+            text: 节点文本表示
             start_point: 起始位置（行，列）
             end_point: 结束位置（行，列）
             metadata: 可选的元数据
-            children: 可选的子项列表
+            children: 可选的子节点列表
             
         Returns:
-            新创建的文档项
+            新创建的语义节点
         """
-        item = DocumentItem(
+        node = SemanticNode(
             node_name=node_name,
-            item_type=item_type,
+            node_type=node_type,
             text=text,
             start_point=start_point,
             end_point=end_point,
             metadata=metadata or {}
         )
         
-        # 添加子项
+        # 添加子节点
         if children:
             for child in children:
-                item.add_child(child)
+                node.add_child(child)
                 
-        return item
+        return node
     
-    def resolve(self, uri: str, parsed_document: DocumentProtocol) -> List[DocumentItem]:
-        """将资源路径解析为 Python 特定的文档项列表。
+    def resolve(self, uri: str, parsed_document: DocumentProtocol) -> List[SemanticNode]:
+        """将资源路径解析为 Python 特定的语义节点列表。
         
         Args:
             uri: 资源路径，如 "#class"、"#function"、"module.class" 等
             parsed_document: 已解析的文档对象
             
         Returns:
-            解析后的文档项列表
+            解析后的语义节点列表
             
         Raises:
             ValueError: 当资源路径格式不正确或不支持的资源类型时抛出
@@ -154,10 +154,10 @@ Python 语言特定的 URI 解析器。
                 # 检查是否包含类方法分隔符
                 if "." in anchor:
                     class_name, method_name = anchor.split(".", 1)
-                    # 创建一个方法文档项
-                    results.append(self._create_document_item(
+                    # 创建一个方法语义节点
+                    results.append(self._create_semantic_node(
                         node_name=method_name,
-                        item_type=ItemType.METHOD,
+                        node_type=NodeType.METHOD,
                         text=f"方法 {method_name} 在类 {class_name} 中",
                         start_point=(0, 0),  # 实际位置需要从解析结果中获取
                         end_point=(0, 0),    # 实际位置需要从解析结果中获取
@@ -169,10 +169,10 @@ Python 语言特定的 URI 解析器。
                     ))
                 # 检查是否可能是类定义
                 elif anchor[0].isupper():
-                    # 创建一个类文档项
-                    results.append(self._create_document_item(
+                    # 创建一个类语义节点
+                    results.append(self._create_semantic_node(
                         node_name=anchor,
-                        item_type=ItemType.CLASS,
+                        node_type=NodeType.CLASS,
                         text=f"类 {anchor}",
                         start_point=(0, 0),  # 实际位置需要从解析结果中获取
                         end_point=(0, 0),    # 实际位置需要从解析结果中获取
@@ -183,9 +183,9 @@ Python 语言特定的 URI 解析器。
                     ))
                 else:
                     # 默认假设是函数定义
-                    results.append(self._create_document_item(
+                    results.append(self._create_semantic_node(
                         node_name=anchor,
-                        item_type=ItemType.FUNCTION,
+                        node_type=NodeType.FUNCTION,
                         text=f"函数 {anchor}",
                         start_point=(0, 0),  # 实际位置需要从解析结果中获取
                         end_point=(0, 0),    # 实际位置需要从解析结果中获取
@@ -194,11 +194,11 @@ Python 语言特定的 URI 解析器。
                             "query": self._python_function_query_template(anchor)
                         }
                     ))
-            # 如果没有锚点但有标识符，可能是变量或其他引用
+            # 如果没有锚点但有标识符，可能是变量或其他引用，创建变量语义节点
             elif identifier:
-                results.append(self._create_document_item(
+                results.append(self._create_semantic_node(
                     node_name=identifier,
-                    item_type=ItemType.VARIABLE,
+                    node_type=NodeType.VARIABLE,
                     text=f"标识符 {identifier}",
                     start_point=(0, 0),  # 实际位置需要从解析结果中获取
                     end_point=(0, 0),    # 实际位置需要从解析结果中获取

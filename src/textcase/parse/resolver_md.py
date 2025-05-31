@@ -9,10 +9,10 @@ from typing import Dict, List, Optional, Any, Tuple
 
 from .parser import ParserProtocol
 from .document import DocumentProtocol
-from .resolver import Resolver, ResolverProtocol, DocumentItem, ItemType
+from .resolver import ResolverProtocol, SemanticNode, NodeType
 
 
-class MarkdownResolver(Resolver, ResolverProtocol):
+class MarkdownResolver(ResolverProtocol):
     """
 Markdown 文档特定的 URI 解析器。
     
@@ -29,7 +29,7 @@ Markdown 文档特定的 URI 解析器。
         """初始化 Markdown URI 解析器。"""
         pass
     
-    def parse_uri(self, uri: str) -> Optional[Dict[str, str]]:
+    def parse_uri(self, uri: Optional[str]) -> List[Tuple[str, str]]:
         """解析资源路径。
         
         注意：这里只处理 / 之后的部分，文件标识符已经由上层处理
@@ -49,112 +49,108 @@ Markdown 文档特定的 URI 解析器。
         
         相应的，输出的 Token 可以分为
 
-        - partialHead : 部分匹配标题
-        - fullHead    : 完全匹配标题
-        - resourceType: 资源类型
+        - partial : 部分匹配标题
+        - full    : 完全匹配标题
+        - rtype   : 资源类型
         
         对应的，返回值应为 [(token_type, value)] 的形式
 
         """
-        if not uri:
+        if uri is None:
             # 如果没有资源路径，则默认为整个文件
-            return {"resource_type": "#file"}
+            return [("rtype", "#file")]
+        
+        result = []
+        
+        # 先根据 / 做切分
+        parts = uri.split("/")
+
+        # 遍历 parts
+        last_full_index = -1
+        for index, part in enumerate(parts):
+            if part.startswith("#"):
+                # 处理特殊资源类型
+                if part in ["#meta", "#frontmatter"]:
+                    # 统一处理为 #meta , #meta , #related 仅能出现在第一个
+                    # 如果之前有值，忽略
+                    result = [("rtype", "#meta")]
+                elif part in ["#item", "#head"]:
+                    result.append(("rtype", "#item"))
+                elif part in ["#test", "#case"]:
+                    result.append(("rtype", "#test"))
+                elif part in ["#related", "#link"]:
+                    if part == "#related":
+                        result = [("rtype", "#related")]
+                    else:
+                        result.append(("rtype", part))
+                else:
+                    # 未知的特殊资源类型 , 是否需要报错？
+                    result.append(("rtype", part))
+                break   # 资源类型必须是最后一个，如果后面还有，忽略
+            else:
+                # 完全匹配标题文本
+                result.append(("full", part.rstrip("/")))
+                last_full_index = index
+        
+        # 找到最后一个 "full" 类型的位置
+        
+        # 如果找到了 "full" 类型的令牌
+        if last_full_index >= 0:
+            # 情况 1: 如果最后一个 "full" 后面是 "rtype"，则改为 "partial"
+            if last_full_index < len(result) - 1 and result[last_full_index + 1][0] == "rtype":
+                _, token_value = result[last_full_index]
+                result[last_full_index] = ("partial", token_value)
             
-        # 解析资源路径
-        match = self.URI_PATH_PATTERN.match(uri)
-        if not match:
-            return None
-        
-        result = {}
-        
-        # 获取资源类型和参数
-        resource_type = match.group("resource_type")
-        resource_params_str = match.group("resource_params")
-        
-        # 如果没有资源类型，则默认为文件本身
-        if not resource_type:
-            result["resource_type"] = "#file"
-            return result
-        
-        # 处理资源类型，支持 #meta 和 #frontmatter 作为同义词
-        if resource_type == "#frontmatter":
-            resource_type = "#meta"
-            
-        # 设置资源类型
-        result["resource_type"] = resource_type
-        
-        # 处理 headPrefix 类型
-        if resource_type == "#headPrefix" and resource_params_str:
-            result["prefix_pattern"] = resource_params_str
-        # 处理其他带参数的资源类型
-        elif resource_params_str:
-            result["resource_params"] = resource_params_str.split("/")
+            # 情况 2: 如果最后一个 "full" 同时也是最后一个令牌，且 URI 不以 / 结尾
+            elif last_full_index == len(result) - 1 and not uri.endswith("/"):
+                _, token_value = result[last_full_index]
+                result[last_full_index] = ("partial", token_value)
         
         return result
     
-    def uri_to_query(self, uri: str) -> str:
+    def uri_to_query(self, uri: str) -> Tuple[str, str]:
         """将资源路径转换为 tree-sitter 查询字符串。
         
         Args:
             uri: 资源路径，如 "#meta"、"#item"、"headText/subHeadText" 等
             
+            1. 资源类型 token ，即 rtype 必须是最后一个，如果后续还有其他 token ，忽略
+            2. #meta , #related 均为返回 frontmatter, 且仅能出现在第一个
         Returns:
             查询字符串
-            
+            uri 中剩余的部分
         Raises:
             ValueError: 当资源路径格式不正确或不支持的资源类型时抛出
         """
-        parsed = self.parse_uri(uri)
-        if not parsed:
+        tokens = self.parse_uri(uri)
+        if not tokens or len(tokens) == 0:
             raise ValueError(f"无效的资源路径: {uri}")
         
-        resource_type = parsed.get("resource_type", "")
-        resource_params = parsed.get("resource_params", [])
+        # 检查是否与 meta frontmatter 相关
+        first_token_type, first_token_value = tokens[0]
+        if first_token_type == "rtype" and first_token_value in ["#meta", "#related"]:
+            # 返回 frontmatter 查询
+            return self._markdown_frontmatter_query_template(), first_token_value
+
+        # 处理后缀
+        headPath = tokens
+        last_token_type, _ = tokens[-1]
+        if last_token_type == "rtype":
+            headPath = headPath[:-1]
         
-        # 根据资源类型生成不同的查询
-        if resource_type == "#meta":
-            # 查询 frontmatter
-            return self._markdown_frontmatter_query_template()
-        elif resource_type == "#item":
-            # 查询第一级标题
-            return self._markdown_level1_heading_query_template()
-        elif resource_type == "#test":
-            # 查询测试用例
-            return self._markdown_test_case_query_template()
-        elif resource_type == "headPrefix":
-            # 查询带有特定前缀的标题
-            prefix_pattern = parsed.get("prefix_pattern")
-            if prefix_pattern:
-                return self._markdown_heading_prefix_query_template(prefix_pattern)
-        elif resource_type == "#link":
-            # 查询链接
-            if resource_params and resource_params[0] == "#meta":
-                return self._markdown_frontmatter_link_query_template()
-            return self._markdown_link_query_template()
-        elif resource_type == "#file":
-            # 查询整个文件
-            return self._markdown_file_query_template()
-        else:
-            # 其他资源类型可能是标题文本
-            if resource_params:
-                # 处理嵌套标题的情况
-                return self._markdown_nested_heading_query_template(resource_type, resource_params)
-            else:
-                # 处理单个标题的情况
-                return self._markdown_heading_query_template(resource_type)
-        
-        raise ValueError(f"不支持的资源类型或缺少必要参数: {uri}")
+        # 构造 headPath 查询
+        raise NotImplementedError
 
     
-    def resolve(self, uri: str, parsed_document: DocumentProtocol) -> List[DocumentItem]:
-        """将资源路径解析为 Markdown 特定的文档项列表。
+    def resolve(self, uri: str, parsed_document: DocumentProtocol) -> List[SemanticNode]:
+        """将资源路径解析为 Markdown 特定的语义节点列表。
         
         Args:
             uri: 资源路径，如 "#meta"、"#item"、"headText/subHeadText" 等
             parsed_document: 已解析的文档对象
             
         Returns:
-            解析后的文档项列表
+            解析后的语义节点列表
             
         Raises:
             ValueError: 当资源路径格式不正确或不支持的资源类型时抛出
@@ -165,229 +161,54 @@ Markdown 文档特定的 URI 解析器。
         if not parsed:
             raise ValueError(f"无效的资源路径: {uri}")
         
-        resource_type = parsed.get("resource_type", "")
-        resource_params = parsed.get("resource_params", [])
-        
-        # 创建结果列表
+        query_string, rtype = self.uri_to_query(uri)
         results = []
         
-        # 根据资源类型生成不同的结果
-        if resource_type == "#meta":
-            # 处理 frontmatter
-            query_string = self._markdown_frontmatter_query_template()
-            
-            if parsed_document:
-                try:
-                    # 直接使用文档对象的查询方法
-                    query_results = parsed_document.query(query_string)
-                    
-                    # 如果找到了 frontmatter
-                    if query_results and len(query_results) > 0:
-                        for result in query_results:
-                            if result.get("name") == "frontmatter":
-                                node = result.get("node")
-                                if node:
-                                    # 获取准确的位置信息
-                                    start_point = (node.start_point[0], node.start_point[1])
-                                    end_point = (node.end_point[0], node.end_point[1])
-                                    
-                                    # 使用文档对象的 get_text 方法获取文本
-                                    text = parsed_document.get_text(start_point, end_point)
-                                    
-                                    # 如果没有文本内容，直接返回空字符串
-                                    if not text:
-                                        meta_content = ""
-                                    else:
-                                        # 处理元数据内容，去除 --- 分隔符，提取实际的键值对
-                                        clean_text = text.strip()
-                                        if clean_text.startswith('---') and '---' in clean_text[3:]:
-                                            # 提取 --- 之间的内容
-                                            meta_content = clean_text[3:].split('---', 1)[0].strip()
-                                        else:
-                                            meta_content = clean_text
-                                
-                                    results.append(self._create_document_item(
-                                        node_name="frontmatter",
-                                        item_type=ItemType.METADATA,
-                                        text=meta_content,  # 使用处理后的元数据内容
-                                        start_point=start_point,
-                                        end_point=end_point,
-                                        metadata={
-                                            "query": query_string,
-                                            "node": node
-                                        }
-                                    ))
-                                else:
-                                    # 如果没有节点信息，使用默认值
-                                    results.append(self._create_document_item(
-                                        node_name="frontmatter",
-                                        item_type=ItemType.METADATA,
-                                        text=result.get("text", ""),
-                                        start_point=result.get("start_point", (0, 0)),
-                                        end_point=result.get("end_point", (0, 0)),
-                                        metadata={
-                                            "query": query_string
-                                        }
-                                    ))
-                except Exception as e:
-                    # 如果查询失败，记录错误但不中断执行
-                    print(f"查询 frontmatter 时出错: {str(e)}")
-                    # 继续使用默认项
-            
-            # 如果没有提供解析器或文档，或者没有找到结果，返回空元数据项
-            if not results:
-                results.append(self._create_document_item(
-                    node_name="frontmatter",
-                    item_type=ItemType.METADATA,
-                    text="",  # 不提供默认文本
-                    start_point=(0, 0),
-                    end_point=(0, 0),
-                    metadata={
-                        "query": query_string,
-                        "empty": True
-                    }
-                ))
-        elif resource_type == "#item":
-            # 处理第一级标题
-            results.append(self._create_document_item(
-                node_name="level1_heading",
-                item_type=ItemType.HEADING,
-                text="第一级标题",
-                start_point=(0, 0),
-                end_point=(0, 0),
-                metadata={
-                    "query": self._markdown_level1_heading_query_template()
-                }
-            ))
-        elif resource_type == "#test":
-            # 处理测试用例
-            results.append(self._create_document_item(
-                node_name="test_case",
-                item_type=ItemType.TEST_CASE,
-                text="测试用例",
-                start_point=(0, 0),
-                end_point=(0, 0),
-                metadata={
-                    "query": self._markdown_test_case_query_template()
-                }
-            ))
-        elif resource_type == "headPrefix":
-            # 处理带有特定前缀的标题
-            prefix_pattern = parsed.get("prefix_pattern")
-            if prefix_pattern:
-                results.append(self._create_document_item(
-                    node_name=f"prefix_{prefix_pattern}",
-                    item_type=ItemType.HEADING,
-                    text=f"带有前缀 {prefix_pattern} 的标题",
-                    start_point=(0, 0),
-                    end_point=(0, 0),
-                    metadata={
-                        "prefix": prefix_pattern,
-                        "query": self._markdown_heading_prefix_query_template(prefix_pattern)
-                    }
-                ))
-        elif resource_type == "#link":
-            # 处理链接
-            if resource_params and resource_params[0] == "#meta":
-                results.append(self._create_document_item(
-                    node_name="frontmatter_link",
-                    item_type=ItemType.LINK,
-                    text="frontmatter 中的链接",
-                    start_point=(0, 0),
-                    end_point=(0, 0),
-                    metadata={
-                        "query": self._markdown_frontmatter_link_query_template()
-                    }
-                ))
-            else:
-                results.append(self._create_document_item(
-                    node_name="link",
-                    item_type=ItemType.LINK,
-                    text="文档中的链接",
-                    start_point=(0, 0),
-                    end_point=(0, 0),
-                    metadata={
-                        "query": self._markdown_link_query_template()
-                    }
-                ))
-        elif resource_type == "#file":
-            # 处理整个文件
-            results.append(self._create_document_item(
-                node_name="file",
-                item_type=ItemType.DOCUMENT,
-                text="整个文件",
-                start_point=(0, 0),
-                end_point=(0, 0),
-                metadata={
-                    "query": self._markdown_file_query_template()
-                }
-            ))
-        else:
-            # 其他资源类型可能是标题文本
-            if resource_params:
-                # 处理嵌套标题
-                parent_heading = resource_type
-                child_heading = resource_params[0]
-                results.append(self._create_document_item(
-                    node_name=f"{parent_heading}_{child_heading}",
-                    item_type=ItemType.HEADING,
-                    text=f"标题 {child_heading} (父标题: {parent_heading})",
-                    start_point=(0, 0),
-                    end_point=(0, 0),
-                    metadata={
-                        "parent_heading": parent_heading,
-                        "child_heading": child_heading,
-                        "query": self._markdown_nested_heading_query_template(parent_heading, resource_params)
-                    }
-                ))
-            else:
-                # 处理单个标题
-                results.append(self._create_document_item(
-                    node_name=resource_type,
-                    item_type=ItemType.HEADING,
-                    text=f"标题 {resource_type}",
-                    start_point=(0, 0),
-                    end_point=(0, 0),
-                    metadata={
-                        "query": self._markdown_heading_query_template(resource_type)
-                    }
-                ))
+        query_results = parsed_document.query_as_list(query_string)
         
+        if rtype == "#meta":
+            for result_name, node in query_results:
+                if result_name == "frontmatter":
+                    # 创建语义节点
+                    semantic_node = SemanticNode.from_ts_node(node, node_type=NodeType.METADATA)
+                    semantic_node.add_offset((1, 0), (-1, 0))
+                    results.append(semantic_node)
+                        
         return results
     
-    def _create_document_item(self, node_name: str, item_type: ItemType, text: str, 
-                             start_point: Tuple[int, int], end_point: Tuple[int, int], 
-                             metadata: Optional[Dict[str, Any]] = None,
-                             children: Optional[List[DocumentItem]] = None) -> DocumentItem:
-        """创建文档项。
+    def _create_semantic_node(self, node_name: str, node_type: NodeType, text: str, 
+                          start_point: Tuple[int, int], end_point: Tuple[int, int], 
+                          metadata: Optional[Dict[str, Any]] = None,
+                          children: Optional[List[SemanticNode]] = None) -> SemanticNode:
+        """创建语义节点。
         
         Args:
             node_name: 节点名称
-            item_type: 项目类型
-            text: 项目文本表示
+            node_type: 节点类型
+            text: 节点文本表示
             start_point: 起始位置（行，列）
             end_point: 结束位置（行，列）
             metadata: 可选的元数据
-            children: 可选的子项列表
+            children: 可选的子节点列表
             
         Returns:
-            新创建的文档项
+            新创建的语义节点
         """
-        item = DocumentItem(
+        node = SemanticNode(
             node_name=node_name,
-            item_type=item_type,
+            node_type=node_type,
             text=text,
             start_point=start_point,
             end_point=end_point,
             metadata=metadata or {}
         )
         
-        # 添加子项
+        # 添加子节点
         if children:
             for child in children:
-                item.add_child(child)
+                node.add_child(child)
                 
-        return item
+        return node
     
     def _markdown_heading_query_template(self, heading_text: str) -> str:
         """生成 Markdown 标题查询模板。
@@ -450,6 +271,9 @@ Markdown 文档特定的 URI 解析器。
     
     def _markdown_frontmatter_query_template(self) -> str:
         """生成 Markdown frontmatter 查询模板。
+        
+        使用 tree-sitter 查询语法提取 frontmatter 内容，并通过 offset 指令
+        去除 YAML 内容前后的 --- 分隔符。
         
         Returns:
             查询字符串
