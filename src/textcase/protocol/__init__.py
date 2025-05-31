@@ -18,6 +18,12 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
+# Message protocol
+from .message import (
+    MessageFile, Message, MessageOutput,
+    FunctionCall
+)
+
 # VFS protocol
 from .vfs import VFS, FileHandle, FileStat, FileSeek, TempDir
 

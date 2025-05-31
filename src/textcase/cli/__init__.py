@@ -35,6 +35,7 @@ from .commands.add import add
 from .commands.tag import tag
 from .commands.list import list_cmd
 from .commands.ask import ask
+from .commands.message import message_cmd
 
 @click.group(invoke_without_command=True)
 @click.option('--project-path', '-p', type=click.Path(exists=True, file_okay=False, path_type=Path), 
@@ -109,6 +110,7 @@ cli.add_command(add)
 cli.add_command(tag)
 cli.add_command(list_cmd, name='list')  # 添加新的 list 命令
 cli.add_command(ask)
+cli.add_command(message_cmd, name='message')  # 添加 message 命令
 
 def main():
     """Entry point for the CLI."""
