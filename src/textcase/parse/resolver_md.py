@@ -145,7 +145,7 @@ Markdown 文档特定的 URI 解析器。
         
         return query_string, rvalue
         
-    def _build_path_query(self, path_components):
+    def _build_path_query(self, path_components: List[Tuple[str, str]]):
         """
         构建一个SCM查询，用于匹配指定的标题路径。
         
@@ -168,6 +168,14 @@ Markdown 文档特定的 URI 解析器。
         id_pattern = re.compile(r'^([a-zA-Z_-]+)(\d+)$')
         match = id_pattern.match(last_component)
         
+        # 处理标题中的特殊字符，确保正确转义
+        def escape_for_regex(s):
+            # 对于Tree-sitter查询中的正则表达式，需要特殊处理
+            # 首先转义所有正则表达式特殊字符
+            s = re.escape(s)
+            s = s.replace("\\", "\\\\")
+            return s
+        
         if last_match_type == "partial":
             # 如果是部分匹配，才需要这么处理
             if match:
@@ -175,41 +183,39 @@ Markdown 文档特定的 URI 解析器。
                 prefix, number = match.groups()
                 # 构造一个正则表达式，允许数字前有任意数量的0
                 # 例如：TC-1, TC-01, TC-001都会匹配到TC-1
-                title_pattern = f"(^|\\[|`|\\s){re.escape(prefix)}0*{number}($|\\]|`|:|\\s).*"
+                title_pattern = f"(^|\\[|`|\\s){escape_for_regex(prefix)}0*{number}($|\\]|`|:|\\s).*"
             else:
                 # 对于非数字标识符，使用更简单的匹配，但是根据语义，必须是 prefix 
-                title_pattern = f"(^\\s){re.escape(last_component)}.*"  
+                title_pattern = f"(^\\s*){escape_for_regex(last_component)}.*"  
         else:
-            # 如果是完全匹配，那么直接使用
-            title_pattern = f"^{re.escape(last_component)}$"
+            # 对于完全匹配，使用精确匹配
+            title_pattern = f"^{escape_for_regex(last_component)}$"
         
         inner_query = """
-        (section
-          (atx_heading
+    (section
+        (atx_heading
             (inline) @title (#match? @title "(?i){title_pattern}"))
-          (_)* @target_content)
-        """.format(title_pattern=title_pattern)
+        (_)* @target_content)
+""".format(title_pattern=title_pattern)
         
         # 从倒数第二个路径组件开始，逐层向外包装查询
         for i in range(len(path_components) - 2, -1, -1):
             match_type, component = path_components[i]
             component = component.lower()
             
-            # 对于父级和祖先标题，根据exact_parent_match决定是否要求精确匹配
+            # 对于父级和祖先标题，根据匹配类型决定是否要求精确匹配
             if match_type == "partial":
                 # 部分匹配，允许标题包含指定组件
-                title_pattern = f"{re.escape(component)}"
+                title_pattern = f".*{escape_for_regex(component)}.*"
             else:
                 # 精确匹配，要求标题完全匹配（不区分大小写）
-                title_pattern = f"^{re.escape(component)}$"
+                title_pattern = f"^{escape_for_regex(component)}$"
             
             # 对齐缩进
-            inner_query = """
-    (section
-        (atx_heading
-        (inline) @title_{i} (#match? @title_{i} "(?i){title_pattern}")
-        {inner})
-            """.format(i=i, title_pattern=title_pattern, inner=inner_query)
+            inner_query = """(section
+  (atx_heading
+    (inline) @title_{i} (#match? @title_{i} "(?i){title_pattern}"))
+  {inner})""".format(i=i, title_pattern=title_pattern, inner=inner_query)
         
         return inner_query
 
