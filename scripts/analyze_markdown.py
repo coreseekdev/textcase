@@ -63,7 +63,11 @@ def print_heading_structure(parsed_doc):
     # Print the full AST for debugging 
     print("\n=== Debug: Full AST ===\n")
     
-    def print_ast(node, indent=0):
+    def print_ast(node, indent=0, max_depth=10):
+        if indent > max_depth:
+            print(f"{'  ' * indent}... (max depth reached)")
+            return
+            
         node_type = node.type
         node_text = node.text.decode('utf8', errors='replace')
         if len(node_text) > 40:
@@ -71,10 +75,10 @@ def print_heading_structure(parsed_doc):
         
         print(f"{'  ' * indent}{node_type} - '{node_text}' at {node.start_point}->{node.end_point}")
         
-        # Only print children for headings and important nodes to keep output manageable
-        if node_type == 'atx_heading' or node_type == 'document':
+        # Print all children recursively
+        if hasattr(node, 'children') and node.children:
             for child in node.children:
-                print_ast(child, indent + 2)
+                print_ast(child, indent + 2, max_depth)
     
     print_ast(parsed_doc.tree.root_node)
     
