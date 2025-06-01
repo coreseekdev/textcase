@@ -137,10 +137,81 @@ Markdown 文档特定的 URI 解析器。
 
         # 处理后缀
         headPath = tokens[:-1]      # 去掉最后一个 token(资源类型)
-
         
         # 构造 headPath 查询
-        raise NotImplementedError
+        query_string = self._build_path_query(headPath)
+        if query_string is None:
+            return None, rvalue
+        
+        return query_string, rvalue
+        
+    def _build_path_query(self, path_components):
+        """
+        构建一个SCM查询，用于匹配指定的标题路径。
+        
+        Args:
+            path_components: 路径组件列表，例如 ["Section 1", "Subsection 1.1"]
+            exact_parent_match: 是否要求路径中间的标题精确匹配
+            
+        Returns:
+            SCM查询字符串
+        """
+        if not path_components:
+            return None
+        
+        # 构建最内层查询，使用#match谓词进行灵活匹配
+        # 对于最后一个组件（目标标题），支持多种格式和编号风格
+        last_match_type, last_component = path_components[-1]
+        
+        # 检查是否是带数字的标识符模式（如TC-01, REQ9等）
+        import re
+        id_pattern = re.compile(r'^([a-zA-Z_-]+)(\d+)$')
+        match = id_pattern.match(last_component)
+        
+        if last_match_type == "partial":
+            # 如果是部分匹配，才需要这么处理
+            if match:
+                # 提取前缀和数字部分
+                prefix, number = match.groups()
+                # 构造一个正则表达式，允许数字前有任意数量的0
+                # 例如：TC-1, TC-01, TC-001都会匹配到TC-1
+                title_pattern = f"(^|\\[|`|\\s){re.escape(prefix)}0*{number}($|\\]|`|:|\\s).*"
+            else:
+                # 对于非数字标识符，使用更简单的匹配，但是根据语义，必须是 prefix 
+                title_pattern = f"(^\\s){re.escape(last_component)}.*"  
+        else:
+            # 如果是完全匹配，那么直接使用
+            title_pattern = f"^{re.escape(last_component)}$"
+        
+        inner_query = """
+        (section
+          (atx_heading
+            (inline) @title (#match? @title "(?i){title_pattern}"))
+          (_)* @target_content)
+        """.format(title_pattern=title_pattern)
+        
+        # 从倒数第二个路径组件开始，逐层向外包装查询
+        for i in range(len(path_components) - 2, -1, -1):
+            match_type, component = path_components[i]
+            component = component.lower()
+            
+            # 对于父级和祖先标题，根据exact_parent_match决定是否要求精确匹配
+            if match_type == "partial":
+                # 部分匹配，允许标题包含指定组件
+                title_pattern = f"{re.escape(component)}"
+            else:
+                # 精确匹配，要求标题完全匹配（不区分大小写）
+                title_pattern = f"^{re.escape(component)}$"
+            
+            # 对齐缩进
+            inner_query = """
+    (section
+        (atx_heading
+        (inline) @title_{i} (#match? @title_{i} "(?i){title_pattern}")
+        {inner})
+            """.format(i=i, title_pattern=title_pattern, inner=inner_query)
+        
+        return inner_query
 
     
     def resolve(self, uri: str, parsed_document: DocumentProtocol) -> List[SemanticNode]:
@@ -177,99 +248,6 @@ Markdown 文档特定的 URI 解析器。
         
         return results
     
-    def _create_semantic_node(self, node_name: str, node_type: NodeType, text: str, 
-                          start_point: Tuple[int, int], end_point: Tuple[int, int], 
-                          metadata: Optional[Dict[str, Any]] = None,
-                          children: Optional[List[SemanticNode]] = None) -> SemanticNode:
-        """创建语义节点。
-        
-        Args:
-            node_name: 节点名称
-            node_type: 节点类型
-            text: 节点文本表示
-            start_point: 起始位置（行，列）
-            end_point: 结束位置（行，列）
-            metadata: 可选的元数据
-            children: 可选的子节点列表
-            
-        Returns:
-            新创建的语义节点
-        """
-        node = SemanticNode(
-            node_name=node_name,
-            node_type=node_type,
-            text=text,
-            start_point=start_point,
-            end_point=end_point,
-            metadata=metadata or {}
-        )
-        
-        # 添加子节点
-        if children:
-            for child in children:
-                node.add_child(child)
-                
-        return node
-    
-    def _markdown_heading_query_template(self, heading_text: str) -> str:
-        """生成 Markdown 标题查询模板。
-        
-        Args:
-            heading_text: 标题文本
-            
-        Returns:
-            查询字符串
-        """
-        return f"""
-        (
-          (atx_heading
-            (atx_heading_marker)
-            (heading_content) @heading_content)
-          (#match? @heading_content ".*{heading_text}.*")
-        )
-        """
-    
-    def _markdown_level1_heading_query_template(self) -> str:
-        """生成 Markdown 第一级标题查询模板。
-        
-        Returns:
-            查询字符串
-        """
-        return """
-        (
-          (atx_heading
-            (atx_heading_marker) @marker
-            (heading_content))
-          (#eq? @marker "#")
-        )
-        """
-    
-    def _markdown_nested_heading_query_template(self, parent_heading: str, child_headings: List[str]) -> str:
-        """生成嵌套标题查询模板。
-        
-        Args:
-            parent_heading: 父标题文本
-            child_headings: 子标题文本列表
-            
-        Returns:
-            查询字符串
-        """
-        child_heading = child_headings[0] if child_headings else ""
-        return f"""
-        (
-          (document
-            (atx_heading
-              (atx_heading_marker)
-              (heading_content) @parent_heading
-              (#match? @parent_heading ".*{parent_heading}.*"))
-            .+
-            (atx_heading
-              (atx_heading_marker)
-              (heading_content) @child_heading
-              (#match? @child_heading ".*{child_heading}.*")))
-        )
-        """
-    
     def _markdown_frontmatter_query_template(self) -> str:
         """生成 Markdown frontmatter 查询模板。
         
@@ -286,53 +264,6 @@ Markdown 文档特定的 URI 解析器。
         )
         """
     
-    def _markdown_test_case_query_template(self, case_id: str = None) -> str:
-        """生成 Markdown 测试用例查询模板。
-        
-        Args:
-            case_id: 可选的测试用例 ID
-            
-        Returns:
-            查询字符串
-        """
-        if case_id:
-            return f"""
-            (
-              (atx_heading
-                (atx_heading_marker)
-                (heading_content) @heading_content)
-              (#match? @heading_content "{case_id}")
-            )
-            """
-        else:
-            # 匹配 CASE-* 或 TST-* 格式的测试用例标题
-            return """
-            (
-              (atx_heading
-                (atx_heading_marker)
-                (heading_content) @heading_content)
-              (#match? @heading_content "(CASE-|TST-)\\w+")
-            )
-            """
-    
-    def _markdown_heading_prefix_query_template(self, prefix: str) -> str:
-        """生成带有特定前缀的标题查询模板。
-        
-        Args:
-            prefix: 标题前缀
-            
-        Returns:
-            查询字符串
-        """
-        return f"""
-        (
-          (atx_heading
-            (atx_heading_marker)
-            (heading_content) @heading_content)
-          (#match? @heading_content "(\\[{prefix}[^\\]]*\\]|{prefix}[^:]*:).*")
-        )
-        """
-    
     def _markdown_link_query_template(self) -> str:
         """生成 Markdown 链接查询模板。
         
@@ -342,23 +273,6 @@ Markdown 文档特定的 URI 解析器。
         return """
         (
           (link) @link
-        )
-        """
-    
-    def _markdown_frontmatter_link_query_template(self) -> str:
-        """生成 Markdown frontmatter 中的链接查询模板。
-        
-        Returns:
-            查询字符串
-        """
-        return """
-        (
-          (document
-            (frontmatter
-              (pair
-                key: (_) @key
-                value: (_) @value
-                (#match? @key ".*link.*"))))
         )
         """
     

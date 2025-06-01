@@ -25,7 +25,7 @@ def build_path_query(path_components):
     inner_query = """
     (section
       (atx_heading
-        (inline) @title (#match? @title "(?i){title}.*"))
+        (inline) @title (#match? @title "(?i){title}($|\]|`|:).*"))
       (_)* @target_content)
     """.format(title=path_components[-1].lower())
     
