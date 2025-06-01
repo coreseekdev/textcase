@@ -13,13 +13,13 @@ textcase.parse 包提供文本解析和资源引用解析功能。
 
 from .parser import Parser
 from .resolver import SemanticNode, NodeType
-from .resolver_py import PythonResolver
+# from .resolver_py import PythonResolver
 from .resolver_md import MarkdownResolver
 
 __all__ = [
     'Parser',
     'SemanticNode',
     'NodeType',
-    'PythonResolver',
+    # 'PythonResolver',
     'MarkdownResolver',
 ]

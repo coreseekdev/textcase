@@ -91,9 +91,7 @@ Markdown 文档特定的 URI 解析器。
                 # 完全匹配标题文本
                 result.append(("full", part.rstrip("/")))
                 last_full_index = index
-        
-        # 找到最后一个 "full" 类型的位置
-        
+
         # 如果找到了 "full" 类型的令牌
         if last_full_index >= 0:
             # 情况 1: 如果最后一个 "full" 后面是 "rtype"，则改为 "partial"
@@ -106,6 +104,11 @@ Markdown 文档特定的 URI 解析器。
                 _, token_value = result[last_full_index]
                 result[last_full_index] = ("partial", token_value)
         
+        last_token_type, _ = result[-1]
+        if last_token_type != "rtype":
+            # 如果最后一个 token 不是 rtype，默认的 rtype 是 #item
+            result.append(("rtype", "#item"))
+
         return result
     
     def uri_to_query(self, uri: str) -> Tuple[str, str]:
@@ -127,16 +130,14 @@ Markdown 文档特定的 URI 解析器。
             raise ValueError(f"无效的资源路径: {uri}")
         
         # 检查是否与 meta frontmatter 相关
-        first_token_type, first_token_value = tokens[0]
-        if first_token_type == "rtype" and first_token_value in ["#meta", "#related"]:
-            # 返回 frontmatter 查询
-            return self._markdown_frontmatter_query_template(), first_token_value
+        rtype, rvalue = tokens[-1]
+        if rtype == "rtype" and rvalue in ["#meta", "#related"]:
+            # 理论上应该检查之前的 path 为空，目前的代码处理为忽略之前的 path， 返回 frontmatter 查询
+            return self._markdown_frontmatter_query_template(), rvalue
 
         # 处理后缀
-        headPath = tokens
-        last_token_type, _ = tokens[-1]
-        if last_token_type == "rtype":
-            headPath = headPath[:-1]
+        headPath = tokens[:-1]      # 去掉最后一个 token(资源类型)
+
         
         # 构造 headPath 查询
         raise NotImplementedError
@@ -173,7 +174,7 @@ Markdown 文档特定的 URI 解析器。
                     semantic_node = SemanticNode.from_ts_node(node, node_type=NodeType.METADATA)
                     semantic_node.add_offset((1, 0), (-1, 0))
                     results.append(semantic_node)
-                        
+        
         return results
     
     def _create_semantic_node(self, node_name: str, node_type: NodeType, text: str, 
