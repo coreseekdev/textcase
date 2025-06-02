@@ -42,7 +42,7 @@ def list_item_details(item: DocumentCaseItem, region: Optional[str], ctx: click.
     
     # Display the item details
     click.echo(f"Item: {key}")
-    
+    click.echo(f"Resource: {region}")
     # Display the item's path if available
     if hasattr(item, 'path') and item.path:
         click.echo(f"Path: {item.path}")

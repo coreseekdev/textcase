@@ -32,6 +32,7 @@ class MarkdownItem(FileDocumentItem):
         """Initialize the markdown item."""
         super().__init__(id=id, prefix=prefix, settings=settings or {})
         self._path = path
+        self._content: Optional[bytes] = None
     
     @property
     def path(self) -> Optional[Path]:
@@ -42,6 +43,14 @@ class MarkdownItem(FileDocumentItem):
     def path(self, value: Path):
         """Set the path to the markdown file."""
         self._path = value
+    
+    @property
+    def content(self) -> bytes:
+        """Get the content of the markdown file."""
+        if self._content is None:
+            with open(self._path, 'rb') as f:
+                self._content = f.read()
+        return self._content
     
     def make_link(self, target: CaseItem, label: Optional[str] = None, region: Optional[str] = None) -> bool:
         """Create a link from this document to the target document.
@@ -55,14 +64,28 @@ class MarkdownItem(FileDocumentItem):
             True if the link was successfully created, False otherwise
         """
         
-        if region is None and label is None:
-            # 如果没有给出具体的 label ( 即没有给出在 markdown 文件中的位置 )
-            # 则默认在 frontmatter 中创建 link
-            region = 'frontmatter'
+        if region is None:
+            # 则默认在 frontmatter | meta 中创建 link
+            region = '#meta'
         
-        if region in ['frontmatter', 'meta']:
-            # 如果明确给出了是在 meta | frontmatter 中创建 link
-            return self.make_link_frontmatter(target, label)
+        if not self._path:
+            raise ValueError(f"Document path not set for {self.key}")
+            
+        if not self._path.exists():
+            raise FileNotFoundError(f"Document {self.key} not found at {self._path}")
+
+        # 使用 Parser 解析文档
+        from textcase.parse.parser import Parser
+        from textcase.parse.document_type import DocumentType
+        from textcase.parse.resolver_md import MarkdownResolver
+        
+        parser = Parser(document_type=DocumentType.MARKDOWN)
+        parsed_document = parser.parse(self.content)
+        resolver = MarkdownResolver()
+
+        # 解析 frontmatter 节点
+        link_target_nodes = resolver.resolve(region, parsed_document=parsed_document)
+        
         
         # 
         return self.make_link_markdown(target, region, label)
@@ -84,27 +107,9 @@ class MarkdownItem(FileDocumentItem):
         Returns:
             True if the link was successfully created, False otherwise
         """
-        if not self._path:
-            raise ValueError(f"Document path not set for {self.key}")
-            
-        if not self._path.exists():
-            raise FileNotFoundError(f"Document {self.key} not found at {self._path}")
+    
         
-        # 读取文件内容
-        with open(self._path, 'rb') as f:
-            content = f.read()  # bytes
-        
-        # 使用 Parser 解析文档
-        from textcase.parse.parser import Parser
-        from textcase.parse.document_type import DocumentType
-        from textcase.parse.resolver_md import MarkdownResolver
-        
-        parser = Parser(document_type=DocumentType.MARKDOWN)
-        parsed_document = parser.parse(content)
-        resolver = MarkdownResolver()
 
-        # 解析 frontmatter 节点
-        frontmatter_nodes = resolver.resolve("#meta", parsed_document=parsed_document)
         
         if not frontmatter_nodes or len(frontmatter_nodes) == 0:
             # 如果没有找到 frontmatter 节点，创建一个新的

@@ -44,7 +44,8 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
     
     Examples:
       textcase link TST1 REQ1                # Link TST001 to REQ001 with no label (in frontmatter)
-      textcase link TST1:meta REQ1           # Explicitly link in frontmatter
+      # textcase link TST1:meta REQ1           # Explicitly link in frontmatter
+        - 废弃这个用法，改为 /#meta 如果需要，与资源定位保持一致
       textcase link TST1:content REQ1        # Link in document content
       textcase link TST1 REQ1 -l "related"   # Link with a specific label
       textcase link TST001 REQ001             # Link using full IDs
@@ -59,29 +60,6 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
         click.echo("Error: No valid project found.", err=True)
         ctx.exit(1)
     
-    """
-    # Get the source document path, module, and region
-    source_path, source_module, source_formatted_id, source_region = get_document_path(source, project, ctx)
-    if not source_path or not source_module:
-        click.echo(f"Error: Could not find source document '{source}'.", err=True)
-        ctx.exit(1)
-    
-    # Check if the source document exists
-    if not source_path.exists():
-        click.echo(f"Error: Source document '{source_formatted_id}' does not exist.", err=True)
-        ctx.exit(1)
-    
-    # Get the target document path and module
-    target_path, target_module, target_formatted_id, _ = get_document_path(target, project, ctx)
-    if not target_path or not target_module:
-        click.echo(f"Error: Could not find target document '{target}'.", err=True)
-        ctx.exit(1)
-    
-    # Check if the target document exists
-    if not target_path.exists():
-        click.echo(f"Error: Target document '{target_formatted_id}' does not exist.", err=True)
-        ctx.exit(1)
-    """
     # Get case items from the modules
     source_item, source_region = get_document_item(source, project, ctx)
     target_item, _ = get_document_item(target, project, ctx)
