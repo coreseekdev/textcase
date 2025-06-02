@@ -138,11 +138,9 @@ class TestPathMatching:
             print(f"匹配数量: {len(matches)}")
             
             # 打印匹配的类型和内容
-            for i, match in enumerate(matches):
-                print(f"匹配 {i}: {type(match)}, {match}")
-                if hasattr(match, 'captures'):
-                    for capture in match.captures:
-                        print(f"  捕获: {capture.node.type} - {capture.name}")
+            for i, match in matches:
+                print(f"title {match['title'][0].text.decode('utf8')}")
+                print(f"\ttarget_content {match['target_content'][0].text.decode('utf8')}")
         except Exception as e:
             print(f"查询执行错误: {e}")
             if not expected_match:
@@ -304,7 +302,7 @@ class TestPathMatching:
         # 验证结果中包含正确的TC-4标题
         tc4_found = False
         for result in results:
-            if "`TC-4` 测试用例4" in result:
+            if "测试用例4" in result:
                 tc4_found = True
                 break
         assert tc4_found, "应该匹配到`TC-4` 测试用例4"

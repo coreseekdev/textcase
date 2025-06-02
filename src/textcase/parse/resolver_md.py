@@ -175,7 +175,23 @@ Markdown 文档特定的 URI 解析器。
             s = re.escape(s)
             s = s.replace("\\", "\\\\")
             return s
-        
+
+        r"""
+        Ref: https://rdrr.io/cran/treesitter/man/query-matches-and-captures.html
+        The regex support provided by ⁠#match?⁠ is powered by grepl().
+
+        Escapes are a little tricky to get right within these match regex strings. 
+        To use something like ⁠\s⁠ in the regex string, you need the literal text ⁠\\s⁠ to appear 
+        in the string to tell the tree-sitter regex engine to escape the backslash 
+        so you end up with just ⁠\s⁠ in the captured string. 
+        This requires putting two literal backslash characters in the R string itself, 
+        which can be accomplished with either "\\\\s" or using a raw string like r'["\\\\s"]' 
+        which is typically a little easier. You can also write your queries 
+        in a separate file (typically called queries.scm) and read them into R, 
+        which is also a little more straightforward because you can just write something 
+        like ⁠(#match? @id "^\\s$")⁠ and that will be read in correctly. 
+        """
+
         if last_match_type == "partial":
             # 如果是部分匹配，才需要这么处理
             if match:
@@ -184,10 +200,11 @@ Markdown 文档特定的 URI 解析器。
                 # 构造一个正则表达式，允许数字前有任意数量的0
                 # 例如：TC-1, TC-01, TC-001都会匹配到TC-1
                 # 添加边界条件，确保只匹配精确的标识符，例如TC-4不会匹配到TC-41
-                title_pattern = f"(^|\\[|`|\\s){escape_for_regex(prefix)}0*{number}($|\\]|`|:|\\s|$).*"
+                title_pattern = f"(^|^\\\\[|^`)\\\\s*{escape_for_regex(prefix)}0*{number}($|\\\\]|`|:|\\\\s|$).*"
             else:
                 # 对于非数字标识符，使用更简单的匹配，但是根据语义，必须是 prefix 
-                title_pattern = f"(^\\s*){escape_for_regex(last_component)}.*"  
+                title_pattern = f"^\\\\s*{escape_for_regex(last_component)}.*" 
+            # title_pattern = title_pattern.replace("\\", "\\\\") 
         else:
             # 对于完全匹配，使用精确匹配
             title_pattern = f"^{escape_for_regex(last_component)}$"
