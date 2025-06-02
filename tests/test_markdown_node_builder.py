@@ -9,7 +9,7 @@ from unittest.mock import Mock, MagicMock
 from enum import Enum
 
 from textcase.parse.resolver import NodeType, SemanticNode
-from textcase.parse.markdown_node_builder import MarkdownSemanticNodeBuilder
+from textcase.parse.resolver_md_node import MarkdownSemanticNodeBuilder
 
 
 class TestMarkdownSemanticNodeBuilder:

@@ -9,7 +9,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, List, Optional, Pattern, Protocol, Tuple, Any, Callable, TypeVar, Union
+from typing import Type, Dict, List, Optional, Pattern, Protocol, Tuple, Any, Callable, TypeVar, Union
 from dataclasses import dataclass, field
 
 from .document import DocumentProtocol, Node
@@ -61,8 +61,8 @@ class SemanticNode:
     """
 
     node_type: NodeType            # 节点类型
-    start_point: Tuple[int, int]   # 起始位置（行，列）
-    end_point: Tuple[int, int]     # 结束位置（行，列）
+    start_point: Tuple[int, int] = field(default=(0, 0))   # 起始位置（行，列）
+    end_point: Tuple[int, int] = field(default=(0, 0))     # 结束位置（行，列）
     metadata: Dict[str, Any] = field(default_factory=dict)  # 元数据
     children: List['SemanticNode'] = field(default_factory=list)  # 子节点列表
     ts_nodes: List[Node] = field(default_factory=list)  # 关联的tree-sitter节点列表
@@ -217,45 +217,6 @@ class SemanticNode:
         )
         
         return doc.get_text(actual_start, actual_end)
-    
-    def create_child(self, node_type: NodeType, node: Optional[Node] = None, metadata: Optional[Dict[str, Any]] = None) -> 'SemanticNode':
-        """从当前节点创建一个子节点。
-        
-        创建一个新的语义节点作为当前节点的子节点。新节点的container设置为当前节点，
-        并自动添加到当前节点的children列表中。
-        
-        Args:
-            node_type: 子节点的类型
-            node: 可选的tree-sitter节点，如果提供则关联到新节点并用于设置位置
-            metadata: 可选的元数据字典，将合并到新节点的元数据中
-            
-        Returns:
-            创建的子节点
-        """
-        # 初始化元数据
-        child_metadata = {}
-        if metadata:
-            child_metadata.update(metadata)
-            
-        # 创建子节点，初始位置与父节点相同
-        child_node = SemanticNode(
-            node_type=node_type,
-            start_point=self.start_point,
-            end_point=self.end_point,
-            metadata=child_metadata,
-        )
-        
-        # 设置容器关系
-        child_node.container = self
-        
-        # 如果提供了tree-sitter节点，则关联并更新位置
-        if node:
-            child_node.add_ts_node(node)
-        
-        # 添加到父节点的子节点列表
-        self.add_child(child_node)
-        
-        return child_node
         
     @classmethod
     def from_ts_node(cls, node: Node, node_type: NodeType) -> 'SemanticNode':
@@ -272,8 +233,6 @@ class SemanticNode:
 
         semantic_node = cls(
             node_type=node_type,
-            start_point=(node.start_point[0], node.start_point[1]),
-            end_point=(node.end_point[0], node.end_point[1]),
             metadata={"original_node_type": node.type}
         )
         
@@ -327,6 +286,18 @@ class SemanticNodeBuilder(Protocol):
         """
         ...
 
+    @abstractmethod
+    def get_node_class(self, node_type: NodeType) -> Type['SemanticNode']:
+        """
+        获取指定节点类型的语义节点类。
+        
+        Args:
+            node_type: 节点类型
+            
+        Returns:
+            对应节点类型的语义节点类
+        """
+        ...
 
 class DefaultSemanticNodeBuilder:
     """
@@ -350,11 +321,11 @@ class DefaultSemanticNodeBuilder:
             创建的语义节点
         """
 
-        semantic_node = SemanticNode.from_ts_node(node, node_type)
+        semantic_node = self.get_node_class(node_type).from_ts_node(node, node_type)
         # 如果提供了元数据，合并到节点的元数据中
         if metadata:
             semantic_node.metadata.update(metadata)
-        return semantic_noded
+        return semantic_node
     
     def create_child_node(self, parent: SemanticNode, node_type: NodeType, 
                          node: Optional[Node] = None, 
@@ -372,8 +343,45 @@ class DefaultSemanticNodeBuilder:
             创建的子语义节点
         """
         # 使用父节点的create_child方法创建子节点
-        return parent.create_child(node_type, node, metadata)
 
+        # 初始化元数据
+        child_metadata = {}
+        if metadata:
+            child_metadata.update(metadata)
+        
+        # child_metadata["original_node_type"] = node_type.name
+        node_cls = self.get_node_class(node_type)
+        semantic_node = node_cls(
+            node_type=node_type,
+            metadata=child_metadata
+        )
+        
+        # 如果提供了tree-sitter节点，则关联并更新位置
+        if node:
+            semantic_node.add_ts_node(node)
+        else:
+            semantic_node.start_point = parent.start_point
+            semantic_node.end_point = parent.end_point
+        
+        # 设置容器关系
+        semantic_node.container = parent
+        
+        # 添加到父节点的子节点列表
+        parent.add_child(semantic_node)
+        
+        return semantic_node
+
+    def get_node_class(self, node_type: NodeType) -> Type['SemanticNode']:
+        """
+        获取指定节点类型的语义节点类。
+        
+        Args:
+            node_type: 节点类型
+            
+        Returns:
+            对应节点类型的语义节点类
+        """
+        return SemanticNode
 
 class ResolverProtocol(Protocol):
     """资源解析器协议。
