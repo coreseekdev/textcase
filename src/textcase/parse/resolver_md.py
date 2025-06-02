@@ -183,7 +183,8 @@ Markdown 文档特定的 URI 解析器。
                 prefix, number = match.groups()
                 # 构造一个正则表达式，允许数字前有任意数量的0
                 # 例如：TC-1, TC-01, TC-001都会匹配到TC-1
-                title_pattern = f"(^|\\[|`|\\s){escape_for_regex(prefix)}0*{number}($|\\]|`|:|\\s).*"
+                # 添加边界条件，确保只匹配精确的标识符，例如TC-4不会匹配到TC-41
+                title_pattern = f"(^|\\[|`|\\s){escape_for_regex(prefix)}0*{number}($|\\]|`|:|\\s|$).*"
             else:
                 # 对于非数字标识符，使用更简单的匹配，但是根据语义，必须是 prefix 
                 title_pattern = f"(^\\s*){escape_for_regex(last_component)}.*"  
@@ -241,17 +242,31 @@ Markdown 文档特定的 URI 解析器。
         
         query_string, rtype = self.uri_to_query(uri)
         results = []
-        
+        query_results = []
+
+        if query_string is None:
+            # 如 uri == #item  则 query_string 为空
+            # 对于 只有 rtype 的情况做特殊处理
+            if rtype == "#item":
+                ...
+            if rtype == "#link":
+                ...
+            if rtype == "#test":
+                ...
+            
         query_results = parsed_document.query_as_list(query_string)
-        
-        if rtype == "#meta":
+            
+
+        if rtype == "#meta" or rtype == "#related":
+            # #related 与 meta 类似，不同在与需要读取其 link 的内容
+            # 为简化起见，不额外构造 Link 节点，交由外部处理
             for result_name, node in query_results:
                 if result_name == "frontmatter":
                     # 创建语义节点
                     semantic_node = SemanticNode.from_ts_node(node, node_type=NodeType.METADATA)
                     semantic_node.add_offset((1, 0), (-1, 0))
                     results.append(semantic_node)
-        
+            ...
         return results
     
     def _markdown_frontmatter_query_template(self) -> str:

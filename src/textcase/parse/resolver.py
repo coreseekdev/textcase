@@ -53,6 +53,8 @@ class SemanticNode:
     建立在tree-sitter节点之上，添加了语义信息和层次结构。
     支持嵌套结构，可以包含子节点。
     可以通过扩展关联到多个tree-sitter节点。
+
+    # 由于 目前 markdown 已经支持了 section ，是否还需要 SemanticNode 存在疑问。
     """
 
     node_type: NodeType            # 节点类型
@@ -61,6 +63,7 @@ class SemanticNode:
     metadata: Dict[str, Any] = field(default_factory=dict)  # 元数据
     children: List['SemanticNode'] = field(default_factory=list)  # 子节点列表
     ts_nodes: List[Node] = field(default_factory=list)  # 关联的tree-sitter节点列表
+    # ts_node_super: Optional[Node] = None  # 关联的tree-sitter节点, 当前的 Node 是这个节点一部分（且不是子节点）， 仅仅是片段
     
     def __str__(self) -> str:
         """返回节点的字符串表示。"""

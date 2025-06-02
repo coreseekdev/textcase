@@ -64,6 +64,16 @@ title: 嵌套标题测试
 ### 实现细节
 
 实现细节内容
+
+## 边界测试标题
+
+### TC-41: 相似编号测试
+
+这个标题不应该被TC-4匹配
+
+### 结尾包含 TC-4 的标题
+
+这个标题虽然包含TC-4但不应该被匹配
 """
 
 # Fixtures
@@ -173,18 +183,21 @@ class TestPathMatching:
         else:
             assert not target_content_found or len(results) == 0, "不应该找到匹配的内容，但找到了"
             
-        return target_content_found and len(results) > 0
+        # 返回匹配结果列表，而不是布尔值
+        return results
     
     def test_one_level_path(self, markdown_resolver, parsed_nested_markdown):
         """测试单级路径匹配"""
         # 测试匹配一级标题
         path_components = [("full", "一级标题")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试匹配不存在的标题
         path_components = [("full", "不存在的标题")]
         # 查询字符串应该生成，但不应该有匹配结果
-        assert not self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components, expected_match=False)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components, expected_match=False)
+        assert len(results) == 0, "不应该有匹配结果"
     
     def test_multi_level_path(self, markdown_resolver, parsed_nested_markdown):
         """测试多级路径匹配"""
@@ -193,7 +206,8 @@ class TestPathMatching:
             ("full", "一级标题"),
             ("full", "二级标题A")
         ]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试三级路径
         path_components = [
@@ -201,7 +215,8 @@ class TestPathMatching:
             ("full", "二级标题A"),
             ("full", "TC-01: 测试用例1")
         ]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
     
     def test_non_level1_starting_path(self, markdown_resolver, parsed_nested_markdown):
         """测试非一级标题起点的路径"""
@@ -210,52 +225,63 @@ class TestPathMatching:
             ("full", "二级标题A"),
             ("full", "TC-01: 测试用例1")
         ]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 从三级标题开始的单级路径
         path_components = [("full", "TC-01: 测试用例1")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
     
     def test_different_heading_formats(self, markdown_resolver, parsed_nested_markdown):
         """测试不同格式的标题匹配"""
         # 测试带冒号的标题
         path_components = [("full", "TC-01: 测试用例1")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试带方括号的标题
         path_components = [("full", "[TC-03]: 测试用例3")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试带反引号的标题
         path_components = [("full", "`TC-4` 测试用例4")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
     
     def test_numbered_identifier_matching(self, markdown_resolver, parsed_nested_markdown):
         """测试编号标识符的匹配"""
         # 使用部分匹配测试TC-01和TC-1的匹配（忽略前导零）
         path_components = [("partial", "TC-1")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 使用部分匹配测试REQ-001和REQ-1的匹配
         path_components = [("partial", "REQ-1")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 使用完全匹配测试精确标题
         path_components = [("full", "TC-01: 测试用例1")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         path_components = [("full", "REQ-001 需求1")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试TC-4和TC-04的匹配
         path_components = [("full", "`TC-4` 测试用例4")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
     
     def test_partial_matching(self, markdown_resolver, parsed_nested_markdown):
         """测试部分匹配"""
         # 测试标题的部分匹配（只匹配标题的一部分）
         path_components = [("partial", "二级标题")]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components, path="partial")
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components, path="partial")
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试多级路径的部分匹配
         path_components = [
@@ -263,8 +289,36 @@ class TestPathMatching:
             ("partial", "二级标题A"),
             ("partial", "TC-01")
         ]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components, path="partial")
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components, path="partial")
+        assert len(results) > 0, "应该有匹配结果"
         
+    def test_partial_matching_boundary_cases(self, markdown_resolver, parsed_nested_markdown):
+        """测试部分匹配的边界情况"""
+        # 测试TC-4不应该匹配到TC-41
+        path_components = [("partial", "TC-4")]
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        
+        # 验证有匹配结果
+        assert len(results) > 0, "应该有匹配结果"
+        
+        # 验证结果中包含正确的TC-4标题
+        tc4_found = False
+        for result in results:
+            if "`TC-4` 测试用例4" in result:
+                tc4_found = True
+                break
+        assert tc4_found, "应该匹配到`TC-4` 测试用例4"
+        
+        # 验证结果中不包含TC-41的内容
+        for result in results:
+            assert "TC-41: 相似编号测试" not in result, "不应该匹配到TC-41"
+            assert "这个标题不应该被TC-4匹配" not in result, "不应该匹配到TC-41的内容"
+        
+        # 测试不应该匹配标题结尾包含TC-4的情况
+        for result in results:
+            assert "结尾包含 TC-4 的标题" not in result, "不应该匹配到结尾包含TC-4的标题"
+            assert "这个标题虽然包含TC-4但不应该被匹配" not in result, "不应该匹配到结尾包含TC-4的内容"
+    
     def test_middle_node_path(self, markdown_resolver, parsed_nested_markdown):
         """测试从中间节点开始的路径匹配"""
         # 测试从二级标题B开始的路径
@@ -272,28 +326,32 @@ class TestPathMatching:
             ("full", "二级标题B"),
             ("full", "[TC-03]: 测试用例3")
         ]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试从二级标题B开始的路径，匹配另一个子标题
         path_components = [
             ("full", "二级标题B"),
             ("full", "`TC-4` 测试用例4")
         ]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试从另一个一级标题开始的路径
         path_components = [
             ("full", "另一个一级标题"),
             ("full", "REQ-001 需求1")
         ]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
         
         # 测试从需求标题开始的路径
         path_components = [
             ("full", "REQ-001 需求1"),
             ("full", "实现细节")
         ]
-        assert self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        results = self._execute_query_and_check_results(markdown_resolver, parsed_nested_markdown, path_components)
+        assert len(results) > 0, "应该有匹配结果"
 
 # Test classes
 class TestParseUri:
