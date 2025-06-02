@@ -40,13 +40,21 @@ class DocumentProtocol(Protocol):
         """获取指定范围的字节数据。"""
         ...
 
+    def replace_bytes(self, start_byte: int, end_byte: int, new_bytes: bytes = b'') -> bytes:
+        """替换指定范围的字节数据。"""
+        ...
+
+    def update_content(self, new_bytes: bytes) -> None:
+        """更新文档内容。"""
+        ...
+
 class Document(DocumentProtocol):
     """解析后的文档抽象。
     
     封装解析后的语法树，提供统一的查询接口。
     """
     
-    def __init__(self, docType: DocumentType, tree: Tree, content: str):
+    def __init__(self, docType: DocumentType, tree: Tree, content: bytes):
         """初始化文档对象。
         
         Args:
@@ -121,9 +129,14 @@ class Document(DocumentProtocol):
             
         if not start_point and not end_point:
             return self.content
-            
+        
+        if isinstance(self.content, bytes):
+            content = self.content.decode('utf-8')   # NOTE: 可能性能有影响，暂时不优化
+        else:
+            content = self.content
+        
         # 将文本拆分为行
-        lines = self.content.splitlines(True)
+        lines = content.splitlines(True)
         
         # 默认值
         start_line = start_point[0] if start_point else 0
@@ -166,7 +179,7 @@ class Document(DocumentProtocol):
             return b""
             
         # 将内容转换为字节
-        content_bytes = self.content.encode('utf-8') if isinstance(self.content, str) else self.content
+        content_bytes = self.content if isinstance(self.content, bytes) else self.content.encode('utf-8')
             
         # 处理默认值
         if start_byte is None:
@@ -181,6 +194,21 @@ class Document(DocumentProtocol):
         # 直接返回字节范围
         return content_bytes[start_byte:end_byte]
         
+    def replace_bytes(self, start_byte: int, end_byte: int, new_bytes: bytes = b'') -> bytes:
+        """替换指定范围的字节数据。"""
+        if not self.content:
+            return
+        
+        # 将内容转换为字节
+        content_bytes = self.content if isinstance(self.content, bytes) else self.content.encode('utf-8')
+            
+        # 确保字节范围有效
+        start_byte = max(0, min(start_byte, len(content_bytes)))
+        end_byte = max(0, min(end_byte, len(content_bytes)))
+        
+        # 替换字节范围
+        return content_bytes[:start_byte] + new_bytes + content_bytes[end_byte:]
+
     def get_text_by_byte_range(self, start_byte: Optional[int] = None, end_byte: Optional[int] = None) -> str:
         """根据字节范围获取指定范围的文本。
         
@@ -195,3 +223,7 @@ class Document(DocumentProtocol):
         """
         byte_data = self.get_bytes(start_byte, end_byte)
         return byte_data.decode('utf-8')
+
+    def update_content(self, new_bytes: bytes) -> None:
+        """更新文档内容。"""
+        self.content = new_bytes

@@ -23,9 +23,11 @@ from textcase.protocol.module import DocumentCaseItem
 from textcase.cli.utils import debug_echo
 
 
-def list_item_details(item: DocumentCaseItem, ctx: click.Context) -> None:
+def list_item_details(item: DocumentCaseItem, region: Optional[str], ctx: click.Context) -> None:
     """
     List details of a specific item.
+
+    NOTE: 从整个系统角度，此处为核心入口点之一，所有的结构化的文本文件，都通过这个函数定位、解析、显示。
     
     Args:
         item: The item to show details for
@@ -34,9 +36,9 @@ def list_item_details(item: DocumentCaseItem, ctx: click.Context) -> None:
     if not item:
         click.echo("Error: Item not found", err=True)
         return
-        
+
     # Get the item's key
-    key = item.key() if hasattr(item, 'key') else "Unknown"
+    key = item.key if hasattr(item, 'key') else "Unknown"
     
     # Display the item details
     click.echo(f"Item: {key}")

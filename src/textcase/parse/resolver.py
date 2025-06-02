@@ -13,6 +13,7 @@ from typing import Type, Dict, List, Optional, Pattern, Protocol, Tuple, Any, Ca
 from dataclasses import dataclass, field
 
 from .document import DocumentProtocol, Node
+from textcase.parse import document
 
 __all__ = [
     'Resolver',
@@ -60,6 +61,7 @@ class SemanticNode:
     # 由于 目前 markdown 已经支持了 section ，是否还需要 SemanticNode 存在疑问。
     """
 
+    document: DocumentProtocol
     node_type: NodeType            # 节点类型
     start_point: Tuple[int, int] = field(default=(0, 0))   # 起始位置（行，列）
     end_point: Tuple[int, int] = field(default=(0, 0))     # 结束位置（行，列）
@@ -219,7 +221,7 @@ class SemanticNode:
         return doc.get_text(actual_start, actual_end)
         
     @classmethod
-    def from_ts_node(cls, node: Node, node_type: NodeType) -> 'SemanticNode':
+    def from_ts_node(cls, document: DocumentProtocol, node: Node, node_type: NodeType) -> 'SemanticNode':
         """从tree-sitter节点创建语义节点。
         
         Args:
@@ -232,6 +234,7 @@ class SemanticNode:
         """
 
         semantic_node = cls(
+            document=document,
             node_type=node_type,
             metadata={"original_node_type": node.type}
         )
@@ -253,7 +256,7 @@ class SemanticNodeBuilder(Protocol):
     """
     
     @abstractmethod
-    def create_node(self, node_type: NodeType, node: Node, 
+    def create_node(self, document: DocumentProtocol, node_type: NodeType, node: Node, 
                    metadata: Optional[Dict[str, Any]] = None) -> SemanticNode:
         """
         创建一个新的语义节点。
@@ -307,7 +310,7 @@ class DefaultSemanticNodeBuilder:
     可以作为其他特定文档类型构建器的基类。
     """
     
-    def create_node(self, node_type: NodeType, node: Node, 
+    def create_node(self, document: DocumentProtocol, node_type: NodeType, node: Node, 
                    metadata: Optional[Dict[str, Any]] = None) -> SemanticNode:
         """
         创建一个新的语义节点。
@@ -321,7 +324,7 @@ class DefaultSemanticNodeBuilder:
             创建的语义节点
         """
 
-        semantic_node = self.get_node_class(node_type).from_ts_node(node, node_type)
+        semantic_node = self.get_node_class(node_type).from_ts_node(document, node, node_type)
         # 如果提供了元数据，合并到节点的元数据中
         if metadata:
             semantic_node.metadata.update(metadata)
@@ -352,6 +355,7 @@ class DefaultSemanticNodeBuilder:
         # child_metadata["original_node_type"] = node_type.name
         node_cls = self.get_node_class(node_type)
         semantic_node = node_cls(
+            document=parent.document,
             node_type=node_type,
             metadata=child_metadata
         )

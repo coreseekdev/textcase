@@ -305,7 +305,7 @@ Markdown 文档特定的 URI 解析器。
             for result_name, node in query_results:
                 if result_name == "frontmatter":
                     # 使用节点构建器创建语义节点
-                    semantic_node = self.node_builder.create_node(NodeType.METADATA, node)
+                    semantic_node = self.node_builder.create_node(parsed_document, NodeType.METADATA, node)
                     semantic_node.add_offset((1, 0), (-1, 0))
                     results.append(semantic_node)
             ...

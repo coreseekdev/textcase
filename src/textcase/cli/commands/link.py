@@ -59,6 +59,7 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
         click.echo("Error: No valid project found.", err=True)
         ctx.exit(1)
     
+    """
     # Get the source document path, module, and region
     source_path, source_module, source_formatted_id, source_region = get_document_path(source, project, ctx)
     if not source_path or not source_module:
@@ -80,9 +81,9 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
     if not target_path.exists():
         click.echo(f"Error: Target document '{target_formatted_id}' does not exist.", err=True)
         ctx.exit(1)
-    
+    """
     # Get case items from the modules
-    source_item, _ = get_document_item(source, project, ctx)
+    source_item, source_region = get_document_item(source, project, ctx)
     target_item, _ = get_document_item(target, project, ctx)
     
     if not source_item or not target_item:
@@ -92,13 +93,13 @@ def link(ctx: click.Context, source: str, target: str, label: str, verbose: bool
     # Create the link
     try:
         source_item.make_link(target_item, label, source_region)
-        link_info = f"{source_formatted_id} -> {target_formatted_id}"
+        link_info = f"{source_item.key} -> {target_item.key}"
         if label:
             link_info += f' ("{label}")'
         if source_region:
             link_info += f" [region: {source_region}]"
-        click.echo(f"Linked: {link_info} ({source_path.parent} -> {target_path.parent})")
+        click.echo(f"Linked: {link_info} ({source_item.path} -> {target_item.path.parent})")
 
-    except Exception as e:
+    except NotImplementedError as e:
         click.echo(f"Error creating link: {e}", err=True)
         ctx.exit(1)

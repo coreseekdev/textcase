@@ -161,14 +161,14 @@ def list_cmd(ctx: click.Context, resource: Optional[str] = None):
             click.echo(f"Error: Could not parse resource path: {resource}", err=True)
             return
             
+        if formatted_id != module_prefix:  # 不仅仅是模块前缀
+            item, _ = get_document_item(resource, project, ctx)
+            if item:
+                list_item_details(item, region, ctx)
+                return
+
         # 如果没有指定资源类型，则检查是否是特定条目
         if not region:
-            if formatted_id != module_prefix:  # 不仅仅是模块前缀
-                item, _ = get_document_item(resource, project, ctx)
-                if item:
-                    list_item_details(item, ctx)
-                    return
-                    
             # 默认行为：列出模块中的条目
             list_module_items(target_module, ctx)
             return
