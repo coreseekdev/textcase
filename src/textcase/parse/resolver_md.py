@@ -52,6 +52,26 @@ Markdown 文档特定的 URI 解析器。
         - partial : 部分匹配标题
         - full    : 完全匹配标题
         - rtype   : 资源类型
+
+        对于资源类型 rtype 包括
+
+        - #meta
+        - #item                     // 当前容器（文件|section）子节点
+        - #test                     // (似乎不必要）过滤条件，满足的节点必须是可执行的测试用例
+                                    // 1. 可以在实际执行前过滤
+                                    // 2. 如果某个 TEST 包含多个不同的 sub-group 难以进一步定位
+        - #related                  // frontmatter 中的链接
+        - #link                     // 当前容器中 所有链接
+                                    // 需要给出所在容器，以及所在容器的 URI
+                                    // 如果是任务模式，实际预期是返回 link 所在的 listitem
+        - #code                     // 当前容器中的代码块
+        - #list                     // 当前容器中的列表, 进一步需要能够给出 listitem 
+                                    // 例如，前述 test 的 sub-group 就可以加入 URI 定位 list
+                                    // 当需要限定资源类型时，对应的 类型必须出现在 URI 中
+                                    // 因为后续的定位，需要围绕该资源类型在展开
+                                    // 需要能够识别是否是 task list 
+        - #auto                     // 自动, 根据查询的结果，动态选择
+        - #content                  // 用于匹配内容
         
         对应的，返回值应为 [(token_type, value)] 的形式
 
@@ -200,7 +220,7 @@ Markdown 文档特定的 URI 解析器。
                 # 构造一个正则表达式，允许数字前有任意数量的0
                 # 例如：TC-1, TC-01, TC-001都会匹配到TC-1
                 # 添加边界条件，确保只匹配精确的标识符，例如TC-4不会匹配到TC-41
-                title_pattern = f"(^|^\\\\[|^`)\\\\s*{escape_for_regex(prefix)}0*{number}($|\\\\]|`|:|\\\\s|$).*"
+                title_pattern = f"(^|^\\\\[|^`|^\\\\s*){escape_for_regex(prefix)}0*{number}($|\\\\]|`|:|\\\\s|$).*"
             else:
                 # 对于非数字标识符，使用更简单的匹配，但是根据语义，必须是 prefix 
                 title_pattern = f"^\\\\s*{escape_for_regex(last_component)}.*" 

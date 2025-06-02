@@ -63,8 +63,8 @@ class SemanticNode:
     metadata: Dict[str, Any] = field(default_factory=dict)  # 元数据
     children: List['SemanticNode'] = field(default_factory=list)  # 子节点列表
     ts_nodes: List[Node] = field(default_factory=list)  # 关联的tree-sitter节点列表
-    # ts_node_super: Optional[Node] = None  # 关联的tree-sitter节点, 当前的 Node 是这个节点一部分（且不是子节点）， 仅仅是片段
-    
+    container: Optional['SemanticNode'] = None  # 当前节点所属的容器
+
     def __str__(self) -> str:
         """返回节点的字符串表示。"""
         name_display = self.node_name if self.node_name else f"<{self.node_type.name}>"
