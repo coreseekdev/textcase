@@ -19,11 +19,14 @@ __all__ = [
     'ResolverProtocol',
     'SemanticNode',  # 更改名称以区分语义节点和tree-sitter节点
     'NodeType',      # 更改名称以更好地表达其作为节点类型的本质
+    'SemanticNodeBuilder',  # 语义节点构建器接口
+    'DefaultSemanticNodeBuilder',  # 默认语义节点构建器实现
 ]
 
 
 class NodeType(Enum):
     """语义节点类型枚举。"""
+    DOCUMENT = auto()     # 文档
     NAME_SPACE = auto()   # 命名空间
     FUNCTION = auto()     # 函数
     CLASS = auto()        # 类
@@ -125,6 +128,9 @@ class SemanticNode:
         Args:
             node: 要关联的tree-sitter节点
         """
+        if len(self.ts_nodes) == 0:
+            self.start_point = (node.start_point[0], node.start_point[1])
+            self.end_point = (node.end_point[0], node.end_point[1])
         self.ts_nodes.append(node)
         
     def expand(self, node: Node) -> None:
@@ -212,6 +218,45 @@ class SemanticNode:
         
         return doc.get_text(actual_start, actual_end)
     
+    def create_child(self, node_type: NodeType, node: Optional[Node] = None, metadata: Optional[Dict[str, Any]] = None) -> 'SemanticNode':
+        """从当前节点创建一个子节点。
+        
+        创建一个新的语义节点作为当前节点的子节点。新节点的container设置为当前节点，
+        并自动添加到当前节点的children列表中。
+        
+        Args:
+            node_type: 子节点的类型
+            node: 可选的tree-sitter节点，如果提供则关联到新节点并用于设置位置
+            metadata: 可选的元数据字典，将合并到新节点的元数据中
+            
+        Returns:
+            创建的子节点
+        """
+        # 初始化元数据
+        child_metadata = {}
+        if metadata:
+            child_metadata.update(metadata)
+            
+        # 创建子节点，初始位置与父节点相同
+        child_node = SemanticNode(
+            node_type=node_type,
+            start_point=self.start_point,
+            end_point=self.end_point,
+            metadata=child_metadata,
+        )
+        
+        # 设置容器关系
+        child_node.container = self
+        
+        # 如果提供了tree-sitter节点，则关联并更新位置
+        if node:
+            child_node.add_ts_node(node)
+        
+        # 添加到父节点的子节点列表
+        self.add_child(child_node)
+        
+        return child_node
+        
     @classmethod
     def from_ts_node(cls, node: Node, node_type: NodeType) -> 'SemanticNode':
         """从tree-sitter节点创建语义节点。
@@ -238,6 +283,97 @@ class SemanticNode:
 
 # 定义类型变量用于表示解析树
 T = TypeVar('T')
+
+
+class SemanticNodeBuilder(Protocol):
+    """
+    语义节点构建器接口。
+    
+    定义了构建语义节点的标准接口，允许不同的文档类型使用自定义的节点构建逻辑。
+    这使得在特定文档的解析器中可以根据文档特性构造合适的 SemanticNode 子类型实例。
+    """
+    
+    @abstractmethod
+    def create_node(self, node_type: NodeType, node: Node, 
+                   metadata: Optional[Dict[str, Any]] = None) -> SemanticNode:
+        """
+        创建一个新的语义节点。
+        
+        Args:
+            node_type: 节点类型
+            node: 可选的tree-sitter节点，如果提供则关联到新节点
+            metadata: 可选的元数据字典
+            
+        Returns:
+            创建的语义节点
+        """
+        ...
+    
+    @abstractmethod
+    def create_child_node(self, parent: SemanticNode, node_type: NodeType, 
+                         node: Optional[Node] = None, 
+                         metadata: Optional[Dict[str, Any]] = None) -> SemanticNode:
+        """
+        创建一个新的子语义节点并添加到父节点。
+        
+        Args:
+            parent: 父节点
+            node_type: 子节点类型
+            node: 可选的tree-sitter节点，如果提供则关联到新节点
+            metadata: 可选的元数据字典
+            
+        Returns:
+            创建的子语义节点
+        """
+        ...
+
+
+class DefaultSemanticNodeBuilder:
+    """
+    默认的语义节点构建器实现。
+    
+    提供了 SemanticNodeBuilder 接口的标准实现，使用基本的 SemanticNode 类来创建节点。
+    可以作为其他特定文档类型构建器的基类。
+    """
+    
+    def create_node(self, node_type: NodeType, node: Node, 
+                   metadata: Optional[Dict[str, Any]] = None) -> SemanticNode:
+        """
+        创建一个新的语义节点。
+        
+        Args:
+            node_type: 节点类型
+            node: tree-sitter节点，关联到新节点
+            metadata: 可选的元数据字典
+            
+        Returns:
+            创建的语义节点
+        """
+
+        semantic_node = SemanticNode.from_ts_node(node, node_type)
+        # 如果提供了元数据，合并到节点的元数据中
+        if metadata:
+            semantic_node.metadata.update(metadata)
+        return semantic_noded
+    
+    def create_child_node(self, parent: SemanticNode, node_type: NodeType, 
+                         node: Optional[Node] = None, 
+                         metadata: Optional[Dict[str, Any]] = None) -> SemanticNode:
+        """
+        创建一个新的子语义节点并添加到父节点。
+        
+        Args:
+            parent: 父节点
+            node_type: 子节点类型
+            node: 可选的tree-sitter节点，如果提供则关联到新节点
+            metadata: 可选的元数据字典
+            
+        Returns:
+            创建的子语义节点
+        """
+        # 使用父节点的create_child方法创建子节点
+        return parent.create_child(node_type, node, metadata)
+
 
 class ResolverProtocol(Protocol):
     """资源解析器协议。

@@ -9,7 +9,8 @@ from typing import Dict, List, Optional, Any, Tuple
 
 from .parser import ParserProtocol
 from .document import DocumentProtocol
-from .resolver import ResolverProtocol, SemanticNode, NodeType
+from .resolver import ResolverProtocol, SemanticNode, NodeType, SemanticNodeBuilder, DefaultSemanticNodeBuilder
+from .resolver_md_node import MarkdownSemanticNodeBuilder
 
 
 class MarkdownResolver(ResolverProtocol):
@@ -25,9 +26,13 @@ Markdown 文档特定的 URI 解析器。
         r"^(?:(?P<resource_type>[^/]+)(?:/(?P<resource_params>.+))?)?$"
     )
     
-    def __init__(self):
-        """初始化 Markdown URI 解析器。"""
-        pass
+    def __init__(self, node_builder: Optional[SemanticNodeBuilder] = None):
+        """初始化 Markdown URI 解析器。
+        
+        Args:
+            node_builder: 可选的语义节点构建器，如果不提供则使用 Markdown 特定的构建器
+        """
+        self.node_builder = node_builder or MarkdownSemanticNodeBuilder()
     
     def parse_uri(self, uri: Optional[str]) -> List[Tuple[str, str]]:
         """解析资源路径。
@@ -299,8 +304,8 @@ Markdown 文档特定的 URI 解析器。
             # 为简化起见，不额外构造 Link 节点，交由外部处理
             for result_name, node in query_results:
                 if result_name == "frontmatter":
-                    # 创建语义节点
-                    semantic_node = SemanticNode.from_ts_node(node, node_type=NodeType.METADATA)
+                    # 使用节点构建器创建语义节点
+                    semantic_node = self.node_builder.create_node(NodeType.METADATA, node)
                     semantic_node.add_offset((1, 0), (-1, 0))
                     results.append(semantic_node)
             ...
