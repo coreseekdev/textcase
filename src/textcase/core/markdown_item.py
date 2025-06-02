@@ -85,74 +85,40 @@ class MarkdownItem(FileDocumentItem):
 
         # 解析 frontmatter 节点
         link_target_nodes = resolver.resolve(region, parsed_document=parsed_document)
-        
-        
-        # 
-        return self.make_link_markdown(target, region, label)
-    
-    def make_link_frontmatter(self, target: CaseItem, label: Optional[str] = None) -> bool:
-        """Create a link from this document to the target document.
-        
-        This method adds a link to the YAML frontmatter of the markdown file.
-        Links are stored in the format:
-        
-        links:
-          target_key:
-            - label1
-            - label2
-        Args:
-            target: 目标项
-            label: 可选的链接标签
-            
-        Returns:
-            True if the link was successfully created, False otherwise
-        """
-    
-        
 
-        
-        if not frontmatter_nodes or len(frontmatter_nodes) == 0:
-            # 如果没有找到 frontmatter 节点，创建一个新的
-            # 使用 python-frontmatter 创建并保存
-            # FIXME: 如果完全移除 python-frontmatter 后，这部分应改为基于字符串模板渲染
-            post = frontmatter.loads(content)
-            post.metadata['links'] = {target.key: [label] if label else []}
-            frontmatter.dump(post, self._path)
-            return True
-        
-        # 获取 frontmatter 节点
-        fm_node = frontmatter_nodes[0]
+        if len(link_target_nodes) == 0:
+            # "Region {region} not found in document {self.key}"
+            # 说明需要手工创建 link 的容器，可能是 meta ，可能是 head
+            # 需要对 region 进行额外的解析
+            parts = resolver.parse_uri(region)
+            if parts is None:
+                raise ValueError(f"Invalid region: {region}")
+            ptype, pvalue = parts[-1]
+            if ptype == 'rtype' and pvalue == '#meta':
+                # 尝试自动创建
+                new_ctx = resolver.ensure_markdown_meta(parsed_document)
+                if new_ctx:
+                    new_tree = parser.reparse(new_ctx, parsed_document)
+                    parsed_document.update_content(new_ctx, new_tree)
+                    
+                    link_target_nodes = resolver.resolve(region, parsed_document=parsed_document)
+                
+            # FIXME: 如果是 head ?
 
-        if fm_node.make_link(target.key, label):
-            # update file
+        if len(link_target_nodes) == 0:
+            # 尝试自动创建，没有成功
+            raise ValueError(f"Region {region} not found in document {self.key}")
+
+        # 获取 target 节点
+        target_node = link_target_nodes[0]
+
+        new_content = target_node.make_link(target.key, label)
+        if new_content:
+            # update file , 理论上可以继续 reparse + update_content  更新document, 
+            # 但是 add link 的目的已经完成，且目前的实现就是（在同一个文件）读取 + 写入
+            # 因此，不额外处理。
             with open(self._path, 'wb') as f:
-                f.write(fm_node.document.get_bytes())
+                f.write(new_content)
             return True
         return False
-    
-    def make_link_markdown(self, target: CaseItem, region: str, label: Optional[str] = None) -> bool:
-        """Create a link from this document to the target document in a specific region.
         
-        Args:
-            target: The target CaseItem to link to
-            region: Region path in format "Head1/Head2/..." to locate where to add the link
-            label: Optional label for the link
-        
-        Returns:
-            True if the link was successfully created, False otherwise
-            
-        Raises:
-            ValueError: If the document path is not set
-            FileNotFoundError: If the document file does not exist
-        """
-        if not self._path:
-            raise ValueError(f"Document path not set for {self.key}")
-            
-        if not self._path.exists():
-            raise FileNotFoundError(f"Document {self.key} not found at {self._path}")
-            
-        # Read the file content
-        with open(self._path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-        raise NotImplementedError

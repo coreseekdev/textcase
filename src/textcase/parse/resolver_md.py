@@ -15,16 +15,11 @@ from .resolver_md_node import MarkdownSemanticNodeBuilder
 
 class MarkdownResolver(ResolverProtocol):
     """
-Markdown 文档特定的 URI 解析器。
+    Markdown 文档特定的 URI 解析器。
     
     针对 Markdown 文档提供更精确的资源引用解析和查询生成。
     支持标题、列表项、代码块等 Markdown 特定元素的定位。
     """
-    
-    # 资源路径正则表达式，支持 #meta、#item 等格式
-    URI_PATH_PATTERN = re.compile(
-        r"^(?:(?P<resource_type>[^/]+)(?:/(?P<resource_params>.+))?)?$"
-    )
     
     def __init__(self, node_builder: Optional[SemanticNodeBuilder] = None):
         """初始化 Markdown URI 解析器。
@@ -396,3 +391,97 @@ Markdown 文档特定的 URI 解析器。
               (fenced_code_block) @code_block
             )
             """
+    
+    def ensure_markdown_meta(self, document: DocumentProtocol) -> bytes:
+        """确保文档中存在 frontmatter（元数据）节点。
+        
+        如果文档中不存在 frontmatter，则创建一个空的 frontmatter。
+        
+        Args:
+            document: 文档对象
+            
+        Returns:
+            bool: 如果成功创建或已存在则返回 True，否则返回 False
+        """
+        # 检查是否已存在 frontmatter
+        query_string = self._markdown_frontmatter_query_template()
+        results = document.query_as_list(query_string)
+        
+        if results and len(results) > 0:
+            # 已存在 frontmatter，无需创建
+            return True
+        
+        # 创建一个新的 frontmatter
+        empty_frontmatter = "---\n\n---\n"
+        root_node = document.get_root_node()
+        
+        if root_node:
+            # 在文档开头插入 frontmatter
+            return document.replace_bytes(0, 0, empty_frontmatter.encode('utf-8'))
+        
+        return b''
+    
+    def ensure_markdown_head(self, heads: List[str], document: DocumentProtocol, resolver: Optional['MarkdownResolver'] = None) -> bool:
+        """确保文档中存在指定的标题路径。
+        
+        逐级检查并创建缺失的标题，从顶层标题开始。
+        
+        Args:
+            heads: 标题路径列表，例如 ["一级标题", "二级标题", "三级标题"]
+            document: 文档对象
+            resolver: 可选的解析器，如果不提供则使用 self
+            
+        Returns:
+            bool: 如果成功创建或已存在则返回 True，否则返回 False
+        """
+        if not heads or len(heads) == 0:
+            return False
+        
+        resolver = resolver or self
+        current_path = []
+        current_level = 1
+        last_node = None
+        
+        # 逐级检查并创建标题
+        for head in heads:
+            current_path.append(head)
+            
+            # 构建当前路径的 URI
+            current_uri = "/".join(current_path)
+            
+            # 检查当前路径是否存在
+            nodes = resolver.resolve(current_uri, document)
+            
+            if not nodes or len(nodes) == 0:
+                # 当前路径不存在，需要创建
+                if last_node:
+                    # 在上一级标题的末尾插入新标题
+                    end_byte = last_node.end_byte
+                    # 创建适当级别的标题，确保有足够的换行
+                    heading_prefix = "\n\n" if end_byte > 0 else ""
+                    heading_text = f"{heading_prefix}{'#' * current_level} {head}\n\n"
+                    document.replace_bytes(end_byte, end_byte, heading_text.encode('utf-8'))
+                else:
+                    # 在文档末尾添加新标题
+                    content_bytes = document.get_bytes()
+                    end_byte = len(content_bytes)
+                    # 确保在文档末尾有足够的换行
+                    heading_prefix = "\n\n" if end_byte > 0 and not content_bytes.endswith(b'\n\n') else ""
+                    if end_byte > 0 and not content_bytes.endswith(b'\n'):
+                        heading_prefix = "\n\n"
+                    elif end_byte > 0 and content_bytes.endswith(b'\n') and not content_bytes.endswith(b'\n\n'):
+                        heading_prefix = "\n"
+                    heading_text = f"{heading_prefix}{'#' * current_level} {head}\n\n"
+                    document.replace_bytes(end_byte, end_byte, heading_text.encode('utf-8'))
+                
+                # 重新获取节点
+                nodes = resolver.resolve(current_uri, document)
+                if not nodes or len(nodes) == 0:
+                    # 创建失败
+                    return False
+            
+            # 更新最后一个节点和当前级别
+            last_node = nodes[0]
+            current_level += 1
+        
+        return True

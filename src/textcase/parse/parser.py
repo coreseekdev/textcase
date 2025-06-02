@@ -92,3 +92,7 @@ class Parser(ParserProtocol):
         document = Document(self.document_type, tree, content)
         
         return document
+
+    def reparse(self, new_content: bytes, document: Document) -> Tree:
+        """重新解析文档。"""
+        return self.parser.parse(new_content, document.tree)

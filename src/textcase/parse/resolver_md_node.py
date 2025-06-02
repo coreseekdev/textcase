@@ -13,7 +13,7 @@ from .resolver import DefaultSemanticNodeBuilder, SemanticNode, NodeType
 
 class MarkdownMetadata(SemanticNode):
 
-    def make_link(self, target: str, label: Optional[str] = None) -> bool:
+    def make_link(self, target: str, label: Optional[str] = None) -> bytes:
         """Create a link from this document to the target document.
         
         Args:
@@ -65,8 +65,7 @@ class MarkdownMetadata(SemanticNode):
                 end_byte,
                 new_fm_text.encode('utf-8')
             )
-            self.document.update_content(new_content)
-            return True
+            return new_content
         else:
             raise NotImplementedError
 
