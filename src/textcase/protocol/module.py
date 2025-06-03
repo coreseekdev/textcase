@@ -13,170 +13,192 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Module protocol and related types."""
+"""Module protocol and related types.
+
+This module re-exports all protocol definitions from the base, document, and source modules.
+"""
 
 from __future__ import annotations
+from typing import Protocol, runtime_checkable, List, Dict, Optional, Any, Union, TypeVar, Type
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from abc import abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Protocol, Set, TypeVar, runtime_checkable
-import yaml
+from typing import Any, Dict, List, Optional, Protocol, TypeVar
 
-from .vfs import VFS
+from .base import (
+    ItemBase,
+    ItemCollection,
+    ModuleBase,
+    ModuleConfigBase,
+)
+
+from .document import (
+    DocumentTag,
+    DocumentItem,
+    DocumentModuleConfig,
+    DocumentModuleBase,
+    DocumentModule,
+    Project,
+    ProjectConfig,
+    ProjectOutline,
+)
+
+from .source import (
+    FileItem,
+    FileModule,
+    SourceCodeItem,
+    SourceModule,
+)
 
 __all__ = [
-    'ModuleConfig',
-    'ProjectConfig',
-    'Module',
+    # Base protocols
+    'ItemBase',
+    'ItemCollection',
+    'ModuleBase',
+    'ModuleConfigBase',
+    
+    # Document protocols
+    'DocumentTag',
+    'DocumentItem',
+    'DocumentModuleConfig',
+    'DocumentModuleBase',
+    'DocumentModule',
     'Project',
-    'ModuleOrder',
-    'ModuleTagging',
+    'ProjectConfig',
+    'ProjectOutline',
+    
+    # Source protocols
+    'FileItem',
+    'FileModule',
+    'SourceCodeItem',
+    'SourceModule',
+    
+    # Legacy names for backward compatibility
+    'ModuleConfig',
+    'Module',
     'CaseItem',
     'DocumentCaseItem',
+    'ModuleOrder',
+    'ModuleTagging',
     'ProjectTags',
+    'SubmoduleInfo',
 ]
 
-class ModuleConfig(Protocol):
-    """Protocol for module configuration."""
-    
-    path: Path
-    """The filesystem path of the module."""
-    
-    settings: Dict[str, Any]
-    """Module settings as key-value pairs."""
-    
-    tags: Dict[str, str]
-    """Module tags as key-description pairs."""
+# Type aliases for backward compatibility
 
-    @classmethod
-    def load(cls, path: Path, vfs: VFS) -> 'ModuleConfig':
-        """Load configuration from storage.
-        
-        Args:
-            path: The path to the module directory.
-            vfs: The virtual filesystem to use for loading.
-            
-        Returns:
-            A new ModuleConfig instance loaded from storage.
-        """
-        ...
-    
-    def save(self, vfs: VFS) -> None:
-        """Save configuration to storage.
-        
-        Args:
-            vfs: The virtual filesystem to use for saving.
-        """
-        ...
-        
-    def update_settings(self, settings: Dict[str, Any]) -> None:
-        """Update module settings.
-        
-        Args:
-            settings: Dictionary of settings to update.
-        """
-        ...
-        
-    def update_tags(self, tags: Dict[str, str]) -> None:
-        """Update module tags.
-        
-        Args:
-            tags: Dictionary of tags to update.
-        """
-        ...
+# ModuleConfig is now DocumentModuleConfig
+ModuleConfig = DocumentModuleConfig
 
+# Module is now DocumentModuleBase
+Module = DocumentModuleBase
 
-class SubmoduleInfo(NamedTuple):
-    """Information about a submodule in the project."""
-    prefix: str
-    """The unique prefix key of the submodule."""
-    
-    path: Path
-    """The filesystem path of the submodule."""
-    
-    parent_prefix: Optional[str]
-    """The prefix key of the parent module, None for root modules."""
+# CaseItem is now DocumentItem
+CaseItem = DocumentItem
 
+# DocumentCaseItem is now DocumentItem
+DocumentCaseItem = DocumentItem
 
-class ProjectConfig(ModuleConfig, Protocol):
-    """Protocol for project configuration, extending ModuleConfig with submodule management.
+# ModuleOrder is now ProjectOutline
+ModuleOrder = ProjectOutline
+
+# ModuleTagging is a subset of DocumentModuleBase functionality
+class ModuleTagging(Protocol):
+    """Protocol for module-level tag management.
     
-    This configuration adds support for managing submodules within a project,
-    including adding, removing, and querying submodule relationships.
+    This protocol defines the interface for managing tags on case items within a module.
+    It provides methods to add, remove, and query tags for case items.
     """
     
     @abstractmethod
-    def add_submodule(self, prefix: str, path: Path, parent_prefix: Optional[str] = None) -> None:
-        """Add a new submodule to the project configuration.
+    def add_tag(self, item: 'CaseItem', tag: str) -> None:
+        """Add a tag to a case item.
         
         Args:
-            prefix: The unique prefix key for the submodule.
-            path: The filesystem path of the submodule.
-            parent_prefix: Optional prefix of the parent module. None indicates a root-level module.
+            item: The case item to tag.
+            tag: The tag to add.
             
         Raises:
-            ValueError: If the prefix is already in use or is invalid.
+            ValueError: If the tag is not in the available tags list.
         """
         ...
-        
+    
     @abstractmethod
-    def remove_submodule(self, prefix: str) -> None:
-        """Remove a submodule from the project configuration.
+    def remove_tag(self, item: 'CaseItem', tag: str) -> None:
+        """Remove a tag from a case item.
         
         Args:
-            prefix: The prefix key of the submodule to remove.
-            
-        Raises:
-            KeyError: If no submodule with the given prefix exists.
-            ValueError: If the submodule has children and force is False.
+            item: The case item to untag.
+            tag: The tag to remove.
         """
         ...
-        
+    
     @abstractmethod
-    def get_submodule(self, prefix: str) -> Optional[SubmoduleInfo]:
-        """Get information about a submodule by its prefix.
+    def get_item_tags(self, item: 'CaseItem') -> List[str]:
+        """Get all tags for a specific case item.
         
         Args:
-            prefix: The prefix key of the submodule to find.
+            item: The case item to get tags for.
             
         Returns:
-            SubmoduleInfo if found, None otherwise.
+            A list of tag names associated with the item.
         """
         ...
-        
+    
     @abstractmethod
-    def get_children(self, prefix: Optional[str] = None) -> List[SubmoduleInfo]:
-        """Get all direct child submodules of the specified module.
+    def get_tags(self) -> List[str]:
+        """Get all available tags."""
+        ...
+    
+    @abstractmethod
+    def invalidate_cache(self) -> None:
+        """Invalidate any cached tag data."""
+        ...
+
+
+class ProjectTags(Protocol):
+    """Protocol for project-level tag management.
+    
+    This protocol defines the interface for managing tags at the project level.
+    It provides access to the tag management functionality for the entire project.
+    """
+    
+    @abstractmethod
+    def get_tags(self, prefix: str) -> List[str]:
+        """Get all available tags for the specified prefix.
+        
+        Tags from parent modules are included in the result.
         
         Args:
-            prefix: The prefix key of the parent module. If None, returns root-level modules.
-            
+            prefix: The prefix to get tags for.
+                   
         Returns:
-            A list of SubmoduleInfo objects for direct children.
+            A list of tag names that can be used with the specified prefix.
         """
         ...
-        
-    @abstractmethod
-    def get_parent(self, prefix: str) -> Optional[SubmoduleInfo]:
-        """Get the parent module of the specified submodule.
+
+
+# Define a type variable for projects to help with type checking
+ProjectType = TypeVar('ProjectType', bound=Module)
+
+# Define a SubmoduleInfo class for storing submodule metadata
+class SubmoduleInfo:
+    """Information about a submodule.
+    
+    This class stores metadata about a submodule, including its path,
+    prefix, and other relevant information.
+    """
+    
+    def __init__(self, path: Path, prefix: str, parent_prefix: Optional[str] = None):
+        """Initialize submodule info.
         
         Args:
-            prefix: The prefix key of the submodule.
-            
-        Returns:
-            SubmoduleInfo of the parent, or None if this is a root module.
+            path: The path to the submodule directory.
+            prefix: The prefix of the submodule.
+            parent_prefix: Optional prefix of the parent module.
         """
-        ...
-        
-    @abstractmethod
-    def get_all_submodules(self) -> Dict[str, SubmoduleInfo]:
-        """Get all submodules in the project.
-        
-        Returns:
-            A dictionary mapping prefix keys to SubmoduleInfo objects.
-        """
-        ...
+        self.path = path
+        self.prefix = prefix
+        self.parent_prefix = parent_prefix
 
 class CaseItem(Protocol):
     """Protocol for a case item that can be tagged.

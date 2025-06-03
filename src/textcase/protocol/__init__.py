@@ -39,11 +39,84 @@ from .agent import (
 # VFS protocol
 from .vfs import VFS, FileHandle, FileStat, FileSeek, TempDir
 
-# Module protocol
+# Base protocols
+from .base import (
+    ItemBase,
+    ItemCollection,
+    ModuleBase,
+    ModuleConfigBase
+)
+
+# Module protocols
 from .module import (
+    # Base protocols
+    ItemBase,
+    ItemCollection,
+    ModuleBase,
+    ModuleConfigBase,
+    
+    # Document protocols
+    DocumentTag,
+    DocumentItem,
+    DocumentModuleConfig,
+    DocumentModuleBase,
+    DocumentModule,
+    Project,
+    ProjectConfig,
+    ProjectOutline,
+    
+    # Source protocols
+    FileItem,
+    FileModule,
+    SourceCodeItem,
+    SourceModule,
+    
+    # Legacy names for backward compatibility
     Module,
     ModuleConfig,
-    ModuleOrder
+    ModuleOrder,
+    ModuleTagging,
+    ProjectTags,
+    CaseItem,
+    DocumentCaseItem
+)
+
+# URI protocol
+from .uri import (
+    URI,
+    URIResolver,
+    ResourceType
+)
+
+# Resource protocol
+from .resource import (
+    Resource,
+    ResourceMetadata,
+    ResourceContent,
+    ResourceReference,
+    ResourceRegistry
+)
+
+# Task protocol
+from .task import (
+    Task,
+    TaskList,
+    TaskStatus,
+    TestCase,
+    TestStep,
+    TestVerification,
+    TestResult,
+    TestRunner
+)
+
+# API protocol
+from .api import (
+    APIServer,
+    APIRoute,
+    APIHandler,
+    APIRequest,
+    APIResponse,
+    APIConfig
 )
 
 # For backward compatibility
@@ -58,11 +131,66 @@ __all__ = [
     'FileSeek',
     'TempDir',
     
-    # Module related
+    # Base protocols
+    'ItemBase',
+    'ItemCollection',
+    'ModuleBase',
+    'ModuleConfigBase',
+    
+    # Document protocols
+    'DocumentTag',
+    'DocumentItem',
+    'DocumentModuleConfig',
+    'DocumentModuleBase',
+    'DocumentModule',
+    'Project',
+    'ProjectConfig',
+    'ProjectOutline',
+    
+    # Source protocols
+    'FileItem',
+    'FileModule',
+    'SourceCodeItem',
+    'SourceModule',
+    
+    # Legacy module related
     'Module',
     'ModuleConfig',
     'ModuleOrder',
-    'ModuleTags',
+    'ModuleTagging',
+    'ProjectTags',
+    'CaseItem',
+    'DocumentCaseItem',
+    
+    # URI related
+    'URI',
+    'URIResolver',
+    'ResourceType',
+    
+    # Resource related
+    'Resource',
+    'ResourceMetadata',
+    'ResourceContent',
+    'ResourceReference',
+    'ResourceRegistry',
+    
+    # Task related
+    'Task',
+    'TaskList',
+    'TaskStatus',
+    'TestCase',
+    'TestStep',
+    'TestVerification',
+    'TestResult',
+    'TestRunner',
+    
+    # API related
+    'APIServer',
+    'APIRoute',
+    'APIHandler',
+    'APIRequest',
+    'APIResponse',
+    'APIConfig',
     
     # LLM related
     'LLMResponseProtocol',
