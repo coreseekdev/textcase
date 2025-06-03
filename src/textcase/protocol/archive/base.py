@@ -13,16 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Base protocol definitions for TextCase."""
+"""Base protocol definitions for TextCase.
+
+This module is deprecated and will be removed in a future version.
+Please use textcase.protocol.resource.base instead.
+"""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Set, TypeVar, runtime_checkable, Union
-
-from .vfs import VFS
+# Re-export from new location
+from .resource.base import (
+    ItemBase,
+    ItemCollection,
+    ModuleBase,
+    ModuleConfigBase
+)
 
 __all__ = [
     'ItemBase',

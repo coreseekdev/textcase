@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 # Message protocol
-from .message import (
+from .llm.message import (
     MessageStore, Message, MessageOutput,
-    FunctionCall
+    MessageItem, FunctionCall, CodeExecutionOutput
 )
 
 # LLM protocol
@@ -31,16 +31,16 @@ from .llm import (
 )
 
 # Agent protocol
-from .agent import (
+from .llm import (
     AgentProtocol,
     AgentFactoryProtocol
 )
 
 # VFS protocol
-from .vfs import VFS, FileHandle, FileStat, FileSeek, TempDir
+from .base import VFS, FileHandle, FileStat, FileSeek, TempDir
 
 # Base protocols
-from .base import (
+from .resource import (
     ItemBase,
     ItemCollection,
     ModuleBase,
@@ -48,7 +48,7 @@ from .base import (
 )
 
 # Module protocols
-from .module import (
+from .resource import (
     # Base protocols
     ItemBase,
     ItemCollection,
@@ -65,7 +65,7 @@ from .module import (
     ProjectConfig,
     ProjectOutline,
     
-    # Source protocols
+    # File item protocols
     FileItem,
     FileModule,
     SourceCodeItem,
@@ -82,14 +82,14 @@ from .module import (
 )
 
 # URI protocol
-from .uri import (
+from .uri.uri import (
     URI,
     URIResolver,
     ResourceType
 )
 
 # Resource protocol
-from .resource import (
+from .uri.resource import (
     Resource,
     ResourceMetadata,
     ResourceContent,
@@ -120,7 +120,7 @@ from .api import (
 )
 
 # For backward compatibility
-from .vfs import VFS as VFSProtocol
+from .base import VFS as VFSProtocol
 
 __all__ = [
     # VFS related

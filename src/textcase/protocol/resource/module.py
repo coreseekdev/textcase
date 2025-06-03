@@ -15,7 +15,7 @@
 #
 """Module protocol and related types.
 
-This module re-exports all protocol definitions from the base, document, and source modules.
+This module re-exports all protocol definitions from the base, document, and file_item modules.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from .document import (
     ProjectOutline,
 )
 
-from .source import (
+from .file_item import (
     FileItem,
     FileModule,
     SourceCodeItem,

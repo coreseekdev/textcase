@@ -13,16 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Source code module and item protocols."""
+"""Source code module and item protocols.
+
+This module is deprecated and will be removed in a future version.
+Please use textcase.protocol.resource.file_item instead.
+"""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Set, TypeVar, runtime_checkable, Union
-
-from .base import ItemBase, ItemCollection, ModuleBase, ModuleConfigBase
-from .vfs import VFS
+# Re-export from new location
+from .resource.file_item import (
+    FileItem,
+    FileModule,
+    SourceCodeItem,
+    SourceModule
+)
 
 __all__ = [
     'FileItem',

@@ -13,7 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Document module and item protocols."""
+"""Document module and item protocols.
+
+This module defines protocols for document resources and collections.
+"""
 
 from __future__ import annotations
 
@@ -22,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Set, TypeVar, runtime_checkable, Union
 
 from .base import ItemBase, ItemCollection, ModuleBase, ModuleConfigBase
-from .vfs import VFS
+from ..base.vfs import VFS
 
 __all__ = [
     'DocumentTag',
