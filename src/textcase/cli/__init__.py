@@ -14,9 +14,9 @@
 # limitations under the License.
 
 
-from .client import TextCaseClient, create_client
+from .client import TextCaseClient, get_client
 
-__all__ = ['TextCaseClient', 'create_client']
+__all__ = ['TextCaseClient', 'get_client']
 
 
 def main():

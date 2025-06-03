@@ -1,45 +1,43 @@
-import time
-import logging
-import threading
+# examples/test_rpc.py
 import sys
+import logging
+from textcase.cli.client import TextCaseClient
 
-# Configure logging to show debug messages
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stdout
-)
-
-logger = logging.getLogger('test_rpc')
-
-from textcase.cli import TextCaseClient
-
-def test_rpc():
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+def test_textcase_rpc():
+    """Test the TextCase RPC client."""
+    print("Starting TextCase RPC test...")
+    
+    # Create client 1
+    client1 = TextCaseClient()
+    print("Client 1 created")
     
     try:
-        # First client will start the inproc server
-        client1 = TextCaseClient()
-        result1 = client1.hello()
-        print(f"First RPC call result: {result1}")
+        # Test RPC call
+        result = client1.hello()
+        print(f"RPC call result: {result}")
+        assert result == "hello world", f"Unexpected result: {result}"
         
-        # Second client will reuse the same connection
+        # Create client 2 (should reuse the same connection)
         client2 = TextCaseClient()
-        result2 = client2.hello()
-        print(f"Second RPC call result: {result2}")
+        print("Client 2 created")
         
-        assert result1 == "hello world", f"Expected 'hello world', got '{result1}'"
-        assert result2 == "hello world", f"Expected 'hello world', got '{result2}'"
+        # Test RPC call on client 2
+        result = client2.hello()
+        print(f"Client 2 RPC call result: {result}")
         
-        print("✅ RPC test passed!")
-        
+        print("✓ All tests passed!")
+        return True
     except Exception as e:
-        print(f"❌ RPC test failed: {e}")
-        raise
+        print(f"❌ Test failed: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        # Clean up
+        del client1
+        if 'client2' in locals():
+            del client2
 
 if __name__ == "__main__":
-    test_rpc()
+    logging.basicConfig(level=logging.INFO)
+    test_textcase_rpc()

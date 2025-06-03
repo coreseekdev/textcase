@@ -1,83 +1,53 @@
-import zerorpc
 import logging
 import threading
-from typing import Any, Optional, Callable
-from textcase.core import start_server
+import zerorpc
+from typing import Optional, Any
+from ..core.service_registry import service_registry
 
 class TextCaseClient:
+    """Client for TextCase RPC service using ServiceRegistry."""
+    
     _instance = None
-    _server_thread = None
-    _server_running = False
-    _clients_count = 0
     _lock = threading.Lock()
 
     def __new__(cls, endpoint: str = "inproc://textcase"):
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super(TextCaseClient, cls).__new__(cls)
-                cls._instance.endpoint = endpoint
-                cls._instance.client = None
-                cls._instance._start_server()
-                cls._instance._connect()
-            cls._clients_count += 1
+                cls._instance._connect(endpoint)
             return cls._instance
 
-    def __init__(self, endpoint: str = "inproc://textcase"):
-        # Initialization is handled in __new__
-        pass
-    
-    def _start_server(self):
-        """Start the inproc server in a separate thread"""
-        if not self._server_running:
-            self._server_thread = threading.Thread(
-                target=start_server,
-                args=(self.endpoint,),
-                daemon=True
-            )
-            self._server_thread.start()
-            self._server_running = True
-            logging.debug(f"Started inproc TextCase RPC server on {self.endpoint}")
-    
-    def _connect(self):
-        """Establish connection to the RPC server"""
-        try:
-            self.client = zerorpc.Client(heartbeat=None, timeout=10)
-            self.client.connect(self.endpoint)
-            logging.debug(f"Connected to TextCase RPC server at {self.endpoint}")
-        except Exception as e:
-            logging.error(f"Failed to connect to RPC server: {e}")
-            self._server_running = False
-            if self._server_thread:
-                self._server_thread.join(timeout=1)
-            raise
+    def _connect(self, endpoint: str):
+        """Connect to the RPC server."""
+        # Get or create the service
+        self.endpoint = service_registry.get_service(
+            "test",
+            endpoint=endpoint,
+        )
+        self.client = zerorpc.Client(connect_to=self.endpoint)
+        logging.debug(f"Connected to TextCase RPC service on {self.endpoint}")
     
     def hello(self) -> str:
-        """Call the hello RPC method
-        
-        Returns:
-            str: The response from the server
-        """
-        try:
-            return self.client.hello()
-        except Exception as e:
-            logging.error(f"RPC call failed: {e}")
-            raise
-
-def create_client(endpoint: str = "inproc://textcase") -> TextCaseClient:
-    """Create a new TextCase RPC client
+        """Call the hello method on the RPC service."""
+        return self.client.hello()
     
-    Args:
-        endpoint (str): The zerorpc server endpoint to connect to
-        
-    Returns:
-        TextCaseClient: An instance of the RPC client
-    """
-    return TextCaseClient(endpoint=endpoint)
+    def name(self) -> str:
+        """Call the name method on the RPC service."""
+        return self.client.name()
+
+    def __getattr__(self, name):
+        """Forward method calls to the RPC client."""
+        return getattr(self.client, name)
+
+# For backward compatibility
+def get_client(endpoint: str = "inproc://textcase") -> TextCaseClient:
+    """Get a TextCase RPC client instance."""
+    return TextCaseClient(endpoint)
 
 if __name__ == "__main__":
     # Example usage
     logging.basicConfig(level=logging.INFO)
-    client = create_client()
+    client = get_client()
     try:
         result = client.hello()
         print(f"Server response: {result}")
