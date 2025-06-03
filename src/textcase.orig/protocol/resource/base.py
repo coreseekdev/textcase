@@ -80,8 +80,5 @@ class ModuleBase(ItemCollection, Protocol):
     def config(self) -> ModuleConfigBase:
         """Get the module's configuration."""
         ...
-    
-    @abstractmethod
-    def save(self) -> None:
-        """Save any changes to the module."""
-        ...
+
+    # NOTE: 不能强制 ModuleBase 提供 Save ， 例如，如果底层抽象为目录，则在文件系统上没有保存语义

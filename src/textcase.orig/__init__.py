@@ -13,11 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""TextCase command line interface."""
+"""TextCase - A full-stack text-based CASE tool."""
 
-def main():
-    """Entry point for the tse command."""
-    print("Hello, World!")
+from .cli import main
 
-if __name__ == "__main__":
-    main()
+__version__ = "0.1.0"
+
+__all__ = ['__version__', 'main']

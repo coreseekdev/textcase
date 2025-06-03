@@ -66,7 +66,7 @@ class DocumentItem(ItemBase, Protocol):
     
     @property
     @abstractmethod
-    def module(self) -> DocumentModuleBase:
+    def module(self) -> 'DocumentModuleBase':
         """Get the module this item belongs to."""
         ...
     
@@ -85,7 +85,7 @@ class DocumentItem(ItemBase, Protocol):
         ...
     
     @abstractmethod
-    def get_links(self) -> Dict[str, List[str]]:
+    def get_links(self, region: Optional[str] = None) -> Dict[str, List[str]]:
         """Get all links from this document.
         
         Returns:

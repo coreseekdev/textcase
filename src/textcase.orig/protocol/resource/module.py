@@ -84,23 +84,6 @@ __all__ = [
     'SubmoduleInfo',
 ]
 
-# Type aliases for backward compatibility
-
-# ModuleConfig is now DocumentModuleConfig
-ModuleConfig = DocumentModuleConfig
-
-# Module is now DocumentModuleBase
-Module = DocumentModuleBase
-
-# CaseItem is now DocumentItem
-CaseItem = DocumentItem
-
-# DocumentCaseItem is now DocumentItem
-DocumentCaseItem = DocumentItem
-
-# ModuleOrder is now ProjectOutline
-ModuleOrder = ProjectOutline
-
 # ModuleTagging is a subset of DocumentModuleBase functionality
 class ModuleTagging(Protocol):
     """Protocol for module-level tag management.
