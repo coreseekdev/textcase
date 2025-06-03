@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Protocol
 from collections.abc import Sequence
 
 # 导入 tree-sitter 类型
-from tree_sitter import Language, Node, Tree, Point
+from tree_sitter import Language, Node, Parser, Tree, Point
 from .document_type import DocumentType
 
 __all__ = ['Document', 'DocumentProtocol']
@@ -44,7 +44,7 @@ class DocumentProtocol(Protocol):
         """替换指定范围的字节数据。"""
         ...
 
-    def update_content(self, new_bytes: bytes, new_tree: Tree) -> None:
+    def update_content(self, new_bytes: bytes, parser: Parser) -> None:
         """更新文档内容。"""
         ...
 
@@ -299,7 +299,7 @@ class Document(DocumentProtocol):
         byte_data = self.get_bytes(start_byte, end_byte)
         return byte_data.decode('utf-8')
 
-    def update_content(self, new_bytes: bytes, new_tree: Tree) -> None:
+    def update_content(self, new_bytes: bytes, parser: Parser) -> None:
         """Update document content and reparse.
         
         Args:
@@ -308,7 +308,7 @@ class Document(DocumentProtocol):
 
         self._revision += 1
         self.content = new_bytes
-        self.tree = new_tree
+        self.tree = parser.reparse(new_bytes, self)
         # print("update_content", self._revision, self.content)
         """ # 不可以如此处理，因为某些语言的解析器未提供 如 sass.
         # Get current document type

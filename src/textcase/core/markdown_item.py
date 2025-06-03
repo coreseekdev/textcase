@@ -93,17 +93,25 @@ class MarkdownItem(FileDocumentItem):
             parts = resolver.parse_uri(region)
             if parts is None:
                 raise ValueError(f"Invalid region: {region}")
+            
+            new_ctx = None
+
             ptype, pvalue = parts[-1]
             if ptype == 'rtype' and pvalue == '#meta':
                 # 尝试自动创建
                 new_ctx = resolver.ensure_markdown_meta(parsed_document)
-                if new_ctx:
-                    new_tree = parser.reparse(new_ctx, parsed_document)
-                    parsed_document.update_content(new_ctx, new_tree)
-                    
-                    link_target_nodes = resolver.resolve(region, parsed_document=parsed_document)
-                
-            # FIXME: 如果是 head ?
+            else:
+                # 如果是 head ? , 此情况下，忽略实际给出的 path_type， 仅使用其路径信息
+                # 注意，只有一次修改文件的机会。
+                new_ctx = resolver.ensure_markdown_head(parts, parsed_document)
+                with open(self._path, 'wb') as f:
+                    f.write(new_ctx)
+            
+            if new_ctx:
+                # 更新正文和解析树（后续考虑不传出 new_ctx ， 和 replace 合并在一起）
+                parsed_document.update_content(new_ctx, parser)
+                link_target_nodes = resolver.resolve(region, parsed_document=parsed_document)
+
 
         if len(link_target_nodes) == 0:
             # 尝试自动创建，没有成功

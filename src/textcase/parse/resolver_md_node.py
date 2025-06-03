@@ -21,7 +21,7 @@ class MarkdownMetadata(SemanticNode):
             label: Optional label for the link
 
         Returns:
-            True if the link was successfully created, False otherwise
+            bytes of the updated document content if the link was successfully created, None otherwise
         """
         # 获取 frontmatter 内容
         fm_text = self.get_text(self.document)
@@ -47,7 +47,7 @@ class MarkdownMetadata(SemanticNode):
         else:
             # 链接已存在，不需要更改， 应考虑处理为异常
             print(f"Link to {target} already exists")
-            return True
+            return b''
         
         # 将更新后的 frontmatter 转换回 YAML 文本
         new_fm_text = yaml.dump(fm_data, default_flow_style=False, allow_unicode=True)

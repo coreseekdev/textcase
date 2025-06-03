@@ -292,7 +292,7 @@ class MarkdownResolver(ResolverProtocol):
                 ...
             
         query_results = parsed_document.query_as_list(query_string)
-            
+        print("qqqq", query_string, rtype)            
 
         if rtype == "#meta" or rtype == "#related":
             # #related 与 meta 类似，不同在与需要读取其 link 的内容
@@ -401,7 +401,7 @@ class MarkdownResolver(ResolverProtocol):
             document: 文档对象
             
         Returns:
-            bool: 如果成功创建或已存在则返回 True，否则返回 False
+            bytes: 如果成功创建或已存在则返回空字节
         """
         # 检查是否已存在 frontmatter
         query_string = self._markdown_frontmatter_query_template()
@@ -409,7 +409,7 @@ class MarkdownResolver(ResolverProtocol):
         
         if results and len(results) > 0:
             # 已存在 frontmatter，无需创建
-            return True
+            return b''
         
         # 创建一个新的 frontmatter
         empty_frontmatter = "---\n\n---\n"
@@ -421,67 +421,101 @@ class MarkdownResolver(ResolverProtocol):
         
         return b''
     
-    def ensure_markdown_head(self, heads: List[str], document: DocumentProtocol, resolver: Optional['MarkdownResolver'] = None) -> bool:
+    def ensure_markdown_head(self, heads: List[Tuple[str, str]], document: DocumentProtocol) -> bytes:
         """确保文档中存在指定的标题路径。
         
         逐级检查并创建缺失的标题，从顶层标题开始。
+        按照路径解析规则处理部分匹配和多匹配情况。
         
         Args:
-            heads: 标题路径列表，例如 ["一级标题", "二级标题", "三级标题"]
+            heads: 标题路径列表，例如 [("full", "一级标题"), ("partial", "二级标题")]
             document: 文档对象
-            resolver: 可选的解析器，如果不提供则使用 self
             
         Returns:
-            bool: 如果成功创建或已存在则返回 True，否则返回 False
+            bytes: 更新后的文档内容，如果未更新则返回空字节
+        
+        Raises:
+            ValueError: 当路径解析出现多个匹配但无法确定插入点时抛出
         """
         if not heads or len(heads) == 0:
-            return False
+            # 在后续的演化， 这类函数会输出 文档的编辑指令。因此不返回内容的语义是不进行修改。 
+            # 目前的实现，语义上存在矛盾，需要注意
+            return b''  
+
+        # 抽取标题路径， 参考 heads 的标题路径格式
+        # 例如 [("full", "一级标题"), ("partial", "二级标题")]
+        # 其中 full 是完整路径， partial 是部分路径
+        # 还需要过滤 ptype 不是 full | partial 的情况
+        paths = [head[1] for head in heads if head[0] in ["full", "partial"]]
         
-        resolver = resolver or self
-        current_path = []
-        current_level = 1
-        last_node = None
+        # 1. 首先检查完整路径是否已存在
+        full_path = "/".join(paths) + "/"       # 强制让系统认为是 full path， 任何涉及创建语义的操作，不可能支持模糊匹配
+        nodes = self.resolve(full_path, document)
         
-        # 逐级检查并创建标题
-        for head in heads:
-            current_path.append(head)
+        # 如果完整路径已存在且只有一个匹配，直接返回
+        # 如果存在多个匹配，也认为路径已存在，无需创建， 多数情况下，并不能继续操作，需要上级处理。
+        if nodes:
+            return b''
+        
+        # 2. 如果完整路径不存在，需要回退找到最后一个存在的父路径
+        insertion_point = None
+        parent_path = paths.copy()
+        
+        while parent_path and not insertion_point:
+            # 移除最后一个路径组件
+            parent_path.pop()
             
-            # 构建当前路径的 URI
-            current_uri = "/".join(current_path)
-            
-            # 检查当前路径是否存在
-            nodes = resolver.resolve(current_uri, document)
-            
-            if not nodes or len(nodes) == 0:
-                # 当前路径不存在，需要创建
-                if last_node:
-                    # 在上一级标题的末尾插入新标题
-                    end_byte = last_node.end_byte
-                    # 创建适当级别的标题，确保有足够的换行
-                    heading_prefix = "\n\n" if end_byte > 0 else ""
-                    heading_text = f"{heading_prefix}{'#' * current_level} {head}\n\n"
-                    document.replace_bytes(end_byte, end_byte, heading_text.encode('utf-8'))
-                else:
-                    # 在文档末尾添加新标题
-                    content_bytes = document.get_bytes()
-                    end_byte = len(content_bytes)
-                    # 确保在文档末尾有足够的换行
-                    heading_prefix = "\n\n" if end_byte > 0 and not content_bytes.endswith(b'\n\n') else ""
-                    if end_byte > 0 and not content_bytes.endswith(b'\n'):
-                        heading_prefix = "\n\n"
-                    elif end_byte > 0 and content_bytes.endswith(b'\n') and not content_bytes.endswith(b'\n\n'):
-                        heading_prefix = "\n"
-                    heading_text = f"{heading_prefix}{'#' * current_level} {head}\n\n"
-                    document.replace_bytes(end_byte, end_byte, heading_text.encode('utf-8'))
+            if not parent_path:  # 如果已经回退到空路径
+                break
                 
-                # 重新获取节点
-                nodes = resolver.resolve(current_uri, document)
-                if not nodes or len(nodes) == 0:
-                    # 创建失败
-                    return False
+            # 构建父路径URI
+            parent_uri = "/".join(parent_path) + "/"
+            parent_nodes = self.resolve(parent_uri, document)
             
-            # 更新最后一个节点和当前级别
-            last_node = nodes[0]
-            current_level += 1
+            # 检查父路径匹配情况
+            if parent_nodes and len(parent_nodes) == 1:
+                # 找到唯一匹配的父节点
+                insertion_point = parent_nodes[0]
+                break
+            elif parent_nodes and len(parent_nodes) > 1:
+                # 存在多个匹配，无法确定插入点
+                raise ValueError(f"Multiple matches found for path '{parent_uri}', cannot determine insertion point")
         
-        return True
+        if not insertion_point:
+            # 处理全新插入的情况，比较简单
+            content_bytes = document.get_bytes()
+            
+            # 在文档末尾添加
+            end_byte = len(content_bytes)
+            current_level = 1  # 从一级标题开始
+        else:
+           
+            end_byte = insertion_point.end_byte
+            # 根据 insertion_point 获得 current_level（接下来要插入的标题级别）
+            # current_level = parent_level + 1
+        
+        # 根据还存在 parent_path 和 paths 对比，获得需要插入的部分
+        paths_to_create = paths[len(parent_path):]   # 要创建的路径
+
+        # 4. 构建要插入的标题文本
+        # 确保有足够的换行
+        if end_byte > 0:
+            if not content_bytes.endswith(b'\n'):
+                heading_prefix = "\n\n"
+            elif not content_bytes.endswith(b'\n\n'):
+                heading_prefix = "\n"
+            else:
+                heading_prefix = ""
+        else:
+            heading_prefix = ""
+        
+        # 构建从父级之后的所有标题
+        heading_text = heading_prefix
+        for i, head in enumerate(paths_to_create):
+            level = current_level + i
+            heading_text += f"{'#' * level} {head}\n\n"
+        
+        #print("====", heading_text)
+        # 5. 执行插入操作
+        return document.replace_bytes(end_byte, end_byte, heading_text.encode('utf-8'))
+
