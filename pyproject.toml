@@ -21,6 +21,8 @@ aiohttp = "^3.9.0"
 certifi = "^2024.2.2"
 tree-sitter = "^0.24.0"
 tree-sitter-language-pack = "^0.7.3"
+zerorpc = "^0.6.3"
+pyzmq = "^26.3.0"
 
 [tool.poetry.scripts]
 tse = "textcase.cli:main"
