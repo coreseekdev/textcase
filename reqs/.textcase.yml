@@ -1,6 +1,7 @@
 modules:
   REQ:
     CHAT: chat
+    IMP: impl
     TST: tests
 settings:
   default_tag: []

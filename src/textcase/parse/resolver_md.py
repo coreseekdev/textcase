@@ -32,6 +32,17 @@ class MarkdownResolver(ResolverProtocol):
     def parse_uri(self, uri: Optional[str]) -> List[Tuple[str, str]]:
         """解析资源路径。
         
+        NOTE: 在之前的设计中，基于 heading 的路径 和 # 联合在一起处理的，但是 
+
+        - #link | #test | #code | #list 等，处理需要额外对 tree-sitter 的检查
+
+        因此，这里将 #link | #test | #code | #list 等，独立出来，可以对 SemanticNode 进行二次查询，从而获得具体的节点
+
+        对于直接以 #xxx 开头的 URI, 含义是对 Document 节点的查询。
+
+        基本的判断规则是， 如果 URI 能够通过 Tree-sitter 的 Query 定位，则认为是 Level-1 的 URI
+        如果需要代码进行额外的处理（过滤等），则认为是 Level-2 的 URI
+
         注意：这里只处理 / 之后的部分，文件标识符已经由上层处理
         支持的资源路径格式如：
         - #meta 或 #frontmatter         ：文件的 frontmatter
@@ -46,7 +57,7 @@ class MarkdownResolver(ResolverProtocol):
         - headPrefix                    ：标题前缀（如 CASE-1）
         - headText                      ：应理解为 匹配 或 部分匹配标题文本
         - headText/                     ：匹配标题文本(全部匹配)
-        
+
         相应的，输出的 Token 可以分为
 
         - partial : 部分匹配标题
