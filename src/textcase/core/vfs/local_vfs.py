@@ -162,6 +162,13 @@ class LocalVFS(ServiceVFSProtocol):
         Returns:
             Path information
         """
+        # 检查路径是否对应一个挂载点
+        vfs, remaining_path = self.resolve_path(path)
+        if vfs is not self:
+            # 如果路径对应一个挂载点，委托给挂载的 VFS
+            return vfs.info(remaining_path)
+        
+        # 否则，使用本地文件系统
         local_path = self._resolve_local_path(path)
         if not os.path.exists(local_path):
             raise FileNotFoundError(f"Path not found: {path}")
@@ -188,6 +195,13 @@ class LocalVFS(ServiceVFSProtocol):
         Returns:
             Dictionary with directory contents
         """
+        # 检查路径是否对应一个挂载点
+        vfs, remaining_path = self.resolve_path(path)
+        if vfs is not self:
+            # 如果路径对应一个挂载点，委托给挂载的 VFS
+            return vfs.list(remaining_path, option)
+        
+        # 否则，使用本地文件系统
         local_path = self._resolve_local_path(path)
         if not os.path.isdir(local_path):
             raise NotADirectoryError(f"Not a directory: {path}")
@@ -225,6 +239,13 @@ class LocalVFS(ServiceVFSProtocol):
             FileNotFoundError: If file not found
             PermissionError: If path is outside root_path
         """
+        # 检查路径是否对应一个挂载点
+        vfs, remaining_path = self.resolve_path(path)
+        if vfs is not self:
+            # 如果路径对应一个挂载点，委托给挂载的 VFS
+            return vfs.get(remaining_path)
+        
+        # 否则，使用本地文件系统
         local_path = self._resolve_local_path(path)
         
         if not os.path.isfile(local_path):
@@ -263,6 +284,13 @@ class LocalVFS(ServiceVFSProtocol):
         Raises:
             PermissionError: If path is outside root_path
         """
+        # 检查路径是否对应一个挂载点
+        vfs, remaining_path = self.resolve_path(path)
+        if vfs is not self:
+            # 如果路径对应一个挂载点，委托给挂载的 VFS
+            return vfs.put(remaining_path, content, create_if_missing)
+        
+        # 否则，使用本地文件系统
         local_path = self._resolve_local_path(path)
         
         # Check if file exists and create_if_missing is False

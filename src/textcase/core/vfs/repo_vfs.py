@@ -41,8 +41,9 @@ class RepoVFS(ServiceVFSProtocol):
         self._local_vfs = LocalVFS(repo_path)
         self._git_vfs = GitVFS(repo_path)
         
-        # Auto-mount .git/ to GitVFS
-        self._local_vfs.mount(PurePosixPath('.git'), self._git_vfs)
+        # Auto-mount .git/ to GitVFS (both relative and absolute paths)
+        self._local_vfs.mount(PurePosixPath('.git'), self._git_vfs)  # 相对路径
+        self._local_vfs.mount(PurePosixPath('/.git'), self._git_vfs)  # 绝对路径
     
     def name(self) -> str:
         """Get the name of the VFS service."""

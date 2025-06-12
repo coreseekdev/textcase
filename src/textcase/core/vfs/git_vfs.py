@@ -305,9 +305,9 @@ class GitVFS(ServiceVFSProtocol):
         if not parts:
             # Root path - list available top-level directories
             return [
-                (PosixPath('tag'), EntryType.DIR),
-                (PosixPath('branch'), EntryType.DIR),
-                (PosixPath('tree'), EntryType.DIR)
+                (PurePosixPath('tag'), EntryType.DIR),
+                (PurePosixPath('branch'), EntryType.DIR),
+                (PurePosixPath('tree'), EntryType.DIR)
             ]
         
         # Handle special directories: tag, branch, tree
@@ -318,7 +318,7 @@ class GitVFS(ServiceVFSProtocol):
                 for tag_name in [ref[10:] for ref in self._repo.references if ref.startswith('refs/tags/')]:
                     # Replace slashes with underscores in tag names
                     safe_tag_name = tag_name.replace('/', '_')
-                    result.append((PosixPath(safe_tag_name), EntryType.LINK))
+                    result.append((PurePosixPath(safe_tag_name), EntryType.LINK))
                 return result
             else:
                 # This is a specific tag, which should be a link to tree
@@ -331,7 +331,7 @@ class GitVFS(ServiceVFSProtocol):
                 for branch_name in self._repo.branches:
                     # Replace slashes with underscores in branch names
                     safe_branch_name = branch_name.replace('/', '_')
-                    result.append((PosixPath(safe_branch_name), EntryType.LINK))
+                    result.append((PurePosixPath(safe_branch_name), EntryType.LINK))
                 return result
             else:
                 # This is a specific branch, which should be a link to tree
@@ -344,7 +344,7 @@ class GitVFS(ServiceVFSProtocol):
                 # Get recent commits (limit to 20)
                 for commit in list(self._repo.walk(self._repo.head.target, pygit2.GIT_SORT_TIME))[:20]:
                     # Short commit hash as directory name
-                    result.append((PosixPath(str(commit.id)[:10]), EntryType.DIR))
+                    result.append((PurePosixPath(str(commit.id)[:10]), EntryType.DIR))
                 return result
             else:
                 # This is a specific tree (commit/branch/tag)
@@ -361,7 +361,7 @@ class GitVFS(ServiceVFSProtocol):
                     result = []
                     for item in entry:
                         entry_type = EntryType.DIR if item.filemode == pygit2.GIT_FILEMODE_TREE else EntryType.FILE
-                        result.append((PosixPath(item.name), entry_type))
+                        result.append((PurePosixPath(item.name), entry_type))
                     
                     return result
                 except Exception as e:
@@ -381,7 +381,7 @@ class GitVFS(ServiceVFSProtocol):
             result = []
             for item in entry:
                 entry_type = EntryType.DIR if item.filemode == pygit2.GIT_FILEMODE_TREE else EntryType.FILE
-                result.append((PosixPath(item.name), entry_type))
+                result.append((PurePosixPath(item.name), entry_type))
             
             return result
         except Exception as e:
