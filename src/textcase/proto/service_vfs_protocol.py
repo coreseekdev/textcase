@@ -11,6 +11,7 @@ from enum import Enum
 class EntryType(Enum):
     """Enumeration for file system entry types."""
     FILE = "file"
+    LINK = "link"
     DIR = "dir"
 
 class ServiceVFSProtocol(ABC):
