@@ -307,10 +307,11 @@ class GitVFS(ServiceVFSProtocol):
             return [
                 (PurePosixPath('tag'), EntryType.DIR),
                 (PurePosixPath('branch'), EntryType.DIR),
-                (PurePosixPath('tree'), EntryType.DIR)
+                (PurePosixPath('tree'), EntryType.DIR),
+                (PurePosixPath('diff'), EntryType.DIR)  # 添加 diff 目录
             ]
         
-        # Handle special directories: tag, branch, tree
+        # Handle special directories: tag, branch, tree, diff
         if parts[0] == 'tag':
             if len(parts) == 1:
                 # List all tags
@@ -366,6 +367,95 @@ class GitVFS(ServiceVFSProtocol):
                     return result
                 except Exception as e:
                     raise ValueError(f"Error listing git path {path}: {e}")
+                    
+        elif parts[0] == 'diff':
+            if len(parts) == 1:
+                # List all commits as potential old_commit_hash (limit to 20)
+                result = []
+                # Get recent commits (limit to 20)
+                for commit in list(self._repo.walk(self._repo.head.target, pygit2.GIT_SORT_TIME))[:20]:
+                    # Short commit hash as directory name
+                    result.append((PurePosixPath(str(commit.id)[:10]), EntryType.DIR))
+                return result
+            elif len(parts) == 2:
+                # List all commits as potential new_commit_hash (limit to 20)
+                old_hash = parts[1]
+                result = []
+                # Get recent commits (limit to 20)
+                for commit in list(self._repo.walk(self._repo.head.target, pygit2.GIT_SORT_TIME))[:20]:
+                    # Short commit hash as directory name
+                    result.append((PurePosixPath(str(commit.id)[:10]), EntryType.DIR))
+                return result
+            elif len(parts) == 3:
+                # List files changed between old_hash and new_hash
+                old_hash = parts[1]
+                new_hash = parts[2]
+                
+                try:
+                    old_commit = self._resolve_commit(old_hash)
+                    new_commit = self._resolve_commit(new_hash)
+                    
+                    # Get the diff between the two commits
+                    diff = self._repo.diff(old_commit, new_commit)
+                    
+                    # Extract unique file paths from the diff
+                    changed_files = set()
+                    for patch in diff:
+                        if patch.delta.new_file.path:
+                            # Get the directory components of the path
+                            path_parts = patch.delta.new_file.path.split('/')
+                            # Add the first component as a directory if it doesn't exist yet
+                            if path_parts and path_parts[0] not in changed_files:
+                                changed_files.add(path_parts[0])
+                    
+                    # Convert to the required format
+                    result = []
+                    for file_path in sorted(changed_files):
+                        # Determine if it's a file or directory based on whether it has a slash
+                        entry_type = EntryType.DIR if '/' in file_path else EntryType.FILE
+                        result.append((PurePosixPath(file_path), entry_type))
+                    
+                    return result
+                except Exception as e:
+                    raise ValueError(f"Error generating diff between {old_hash} and {new_hash}: {e}")
+            else:
+                # This is a path within the diff
+                old_hash = parts[1]
+                new_hash = parts[2]
+                file_path = PurePosixPath(*parts[3:])
+                
+                try:
+                    old_commit = self._resolve_commit(old_hash)
+                    new_commit = self._resolve_commit(new_hash)
+                    
+                    # Get the diff between the two commits
+                    diff = self._repo.diff(old_commit, new_commit)
+                    
+                    # Find all files in the specified directory
+                    prefix = str(file_path) + '/'
+                    changed_files = set()
+                    
+                    for patch in diff:
+                        patch_path = patch.delta.new_file.path
+                        # Check if this file is in the requested directory
+                        if patch_path.startswith(prefix):
+                            # Get the next path component
+                            remaining = patch_path[len(prefix):]
+                            next_part = remaining.split('/', 1)[0] if '/' in remaining else remaining
+                            if next_part:
+                                changed_files.add(next_part)
+                    
+                    # Convert to the required format
+                    result = []
+                    for file_name in sorted(changed_files):
+                        # Determine if it's a file or directory
+                        full_path = prefix + file_name
+                        entry_type = EntryType.DIR if any(p.delta.new_file.path.startswith(full_path + '/') for p in diff) else EntryType.FILE
+                        result.append((PurePosixPath(file_name), entry_type))
+                    
+                    return result
+                except Exception as e:
+                    raise ValueError(f"Error listing files in diff path {path}: {e}")
         
         # Legacy format support: ref/path/to/file
         ref = parts[0]
@@ -400,7 +490,7 @@ class GitVFS(ServiceVFSProtocol):
         if len(parts) < 1:
             raise ValueError(f"Invalid git path: {path}")
         
-        # Handle special directories: tag, branch, tree
+        # Handle special directories: tag, branch, tree, diff
         if parts[0] == 'tag':
             if len(parts) != 2:
                 raise ValueError(f"Invalid tag path: {path}")
@@ -454,6 +544,174 @@ class GitVFS(ServiceVFSProtocol):
                 return blob.data
             except Exception as e:
                 raise ValueError(f"Error reading git file {path}: {e}")
+                
+        elif parts[0] == 'diff':
+            if len(parts) < 3:
+                raise ValueError(f"Invalid diff path: {path}")
+            
+            old_hash = parts[1]
+            new_hash = parts[2]
+            
+            try:
+                old_commit = self._resolve_commit(old_hash)
+                new_commit = self._resolve_commit(new_hash)
+                
+                # Get the diff between the two commits
+                diff = self._repo.diff(old_commit, new_commit)
+                
+                if len(parts) == 3:
+                    # Return the full diff patch
+                    # Format the diff as a unified diff
+                    patch_text = ''
+                    for patch in diff:
+                        # 添加文件头信息
+                        old_file = patch.delta.old_file.path
+                        new_file = patch.delta.new_file.path
+                        patch_text += f'diff --git a/{old_file} b/{new_file}\n'
+                        
+                        # 添加文件模式信息
+                        old_mode = patch.delta.old_file.mode
+                        new_mode = patch.delta.new_file.mode
+                        if old_mode != new_mode:
+                            patch_text += f'old mode {old_mode:o}\n'
+                            patch_text += f'new mode {new_mode:o}\n'
+                        
+                        # 添加索引信息
+                        old_id = patch.delta.old_file.id
+                        new_id = patch.delta.new_file.id
+                        patch_text += f'index {old_id}..{new_id}\n'
+                        
+                        # 添加 a/b 路径
+                        patch_text += f'--- a/{old_file}\n'
+                        patch_text += f'+++ b/{new_file}\n'
+                        
+                        # 添加每个 hunk
+                        for hunk in patch.hunks:
+                            patch_text += f'@@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@\n'
+                            for line in hunk.lines:
+                                if line.origin == '+':
+                                    patch_text += '+' + line.content
+                                elif line.origin == '-':
+                                    patch_text += '-' + line.content
+                                else:  # 上下文行
+                                    patch_text += ' ' + line.content
+                                # 如果行内容不以换行符结束，添加一个
+                                if not line.content.endswith('\n'):
+                                    patch_text += '\n'
+                        
+                        patch_text += '\n'
+                    
+                    return patch_text.encode('utf-8') if patch_text else b''
+                else:
+                    # Return the patch for a specific file or directory
+                    file_path = '/'.join(parts[3:])
+                    
+                    # 检查是否为目录路径请求
+                    is_directory = False
+                    if not file_path.endswith('/'):
+                        file_path_prefix = file_path + '/'
+                    else:
+                        file_path_prefix = file_path
+                        file_path = file_path[:-1]  # 移除末尾的斜杠
+                    
+                    # 检查是否有文件在这个目录下
+                    files_in_dir = []
+                    for patch in diff:
+                        patch_path = patch.delta.new_file.path
+                        if patch_path.startswith(file_path_prefix) or patch_path == file_path:
+                            files_in_dir.append(patch)
+                        elif patch.delta.old_file.path.startswith(file_path_prefix) or patch.delta.old_file.path == file_path:
+                            files_in_dir.append(patch)
+                    
+                    if files_in_dir:
+                        # 这是一个目录，返回该目录下所有文件的补丁
+                        patch_text = ''
+                        for patch in files_in_dir:
+                            # 添加文件头信息
+                            old_file = patch.delta.old_file.path
+                            new_file = patch.delta.new_file.path
+                            patch_text += f'diff --git a/{old_file} b/{new_file}\n'
+                            
+                            # 添加文件模式信息
+                            old_mode = patch.delta.old_file.mode
+                            new_mode = patch.delta.new_file.mode
+                            if old_mode != new_mode:
+                                patch_text += f'old mode {old_mode:o}\n'
+                                patch_text += f'new mode {new_mode:o}\n'
+                            
+                            # 添加索引信息
+                            old_id = patch.delta.old_file.id
+                            new_id = patch.delta.new_file.id
+                            patch_text += f'index {old_id}..{new_id}\n'
+                            
+                            # 添加 a/b 路径
+                            patch_text += f'--- a/{old_file}\n'
+                            patch_text += f'+++ b/{new_file}\n'
+                            
+                            # 添加每个 hunk
+                            for hunk in patch.hunks:
+                                patch_text += f'@@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@\n'
+                                for line in hunk.lines:
+                                    if line.origin == '+':
+                                        patch_text += '+' + line.content
+                                    elif line.origin == '-':
+                                        patch_text += '-' + line.content
+                                    else:  # 上下文行
+                                        patch_text += ' ' + line.content
+                                    # 如果行内容不以换行符结束，添加一个
+                                    if not line.content.endswith('\n'):
+                                        patch_text += '\n'
+                            
+                            patch_text += '\n'
+                        
+                        return patch_text.encode('utf-8')
+                    else:
+                        # 尝试作为单个文件处理
+                        for patch in diff:
+                            if patch.delta.new_file.path == file_path or patch.delta.old_file.path == file_path:
+                                # 格式化单个文件的补丁
+                                patch_text = ''
+                                
+                                # 添加文件头信息
+                                old_file = patch.delta.old_file.path
+                                new_file = patch.delta.new_file.path
+                                patch_text += f'diff --git a/{old_file} b/{new_file}\n'
+                                
+                                # 添加文件模式信息
+                                old_mode = patch.delta.old_file.mode
+                                new_mode = patch.delta.new_file.mode
+                                if old_mode != new_mode:
+                                    patch_text += f'old mode {old_mode:o}\n'
+                                    patch_text += f'new mode {new_mode:o}\n'
+                                
+                                # 添加索引信息
+                                old_id = patch.delta.old_file.id
+                                new_id = patch.delta.new_file.id
+                                patch_text += f'index {old_id}..{new_id}\n'
+                                
+                                # 添加 a/b 路径
+                                patch_text += f'--- a/{old_file}\n'
+                                patch_text += f'+++ b/{new_file}\n'
+                                
+                                # 添加每个 hunk
+                                for hunk in patch.hunks:
+                                    patch_text += f'@@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@\n'
+                                    for line in hunk.lines:
+                                        if line.origin == '+':
+                                            patch_text += '+' + line.content
+                                        elif line.origin == '-':
+                                            patch_text += '-' + line.content
+                                        else:  # 上下文行
+                                            patch_text += ' ' + line.content
+                                        # 如果行内容不以换行符结束，添加一个
+                                        if not line.content.endswith('\n'):
+                                            patch_text += '\n'
+                                
+                                return patch_text.encode('utf-8')
+                    
+                    raise FileNotFoundError(f"路径在差异中未找到: {file_path}。请确认路径是否正确，或者该路径下的文件可能未在这两个提交之间发生变化。")
+            except Exception as e:
+                raise ValueError(f"Error generating diff for {path}: {e}")
         
         # Legacy format support: ref/path/to/file
         if len(parts) < 2:
