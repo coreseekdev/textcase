@@ -3,9 +3,10 @@ from typing import Dict, List, Optional, Tuple, Any
 import json
 import uuid
 from .vfs_resolver import PathResolver
+from ..proto.service_vfs_protocol import ServiceVFSProtocol
 
 
-class VFSService:
+class VFSService(ServiceVFSProtocol):
     """VFS service that provides RPC interface for virtual file system operations."""
     
     def __init__(self, root_path: str):

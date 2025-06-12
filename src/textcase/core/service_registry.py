@@ -4,7 +4,7 @@ Provides ServiceRegistry protocol and its default implementation.
 """
 from pathlib import Path
 
-from .service_registry_protocol import ServiceRegistry
+from ..proto.service_registry_protocol import ServiceRegistry
 from .service_registry_impl import ServiceRegistryImpl
 
 # Export the protocol and implementation

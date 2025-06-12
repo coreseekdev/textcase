@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 import copy
 
-from .service_config_protocol import ServiceConfigProtocol
+from ...proto.service_config_protocol import ServiceConfigProtocol
 
 
 class ConfigService(ServiceConfigProtocol):
@@ -56,7 +56,7 @@ class ConfigService(ServiceConfigProtocol):
             print(f"Warning: Could not load config file {self._config_file}: {e}")
             self._persistent_config = {}
     
-    def get(self, key: str, default: Optional[Union[str, List[str]]] = None) -> Optional[Union[str, List[str]]] :
+    def get(self, key: str, default: Optional[Union[str, List[str]]] = None) -> Union[None, str, List[str]]:
         """Get configuration value by key.
         
         Temporary config takes precedence over persistent config.
@@ -101,18 +101,26 @@ class ConfigService(ServiceConfigProtocol):
         
         return value
     
-    def set(self, key: str, value: Union[str, List[str]], persistent: bool = False) -> Union[str, List[str]]:
+    def set(self, key: str, value: Union[None, str, List[str]]) -> Union[None,str, List[str]]:
         """Set configuration value by key.
+
+        - 调整了语义，如果 value 为 None, 则含义是删除配置项
         
         Args:
             key: Configuration key (supports dot notation)
             value: Value to set (can be scalar or list)
             persistent: Whether to store in persistent config (default: temporary)
         """
-        target_config = self._persistent_config if persistent else self._temporary_config
+        # set 一定是持久设置
+        if value is None:
+            orig_value = self._get_from_dict(self._persistent_config, key)
+            self._remove_from_dict(self._temporary_config, key)
+            self._remove_from_dict(self._persistent_config, key)
+            return orig_value
+        target_config = self._persistent_config
         return self._set_in_dict(target_config, key, value)
     
-    def _set_in_dict(self, config_dict: Dict[str, Union[str, List[str]]], key: str, value: Union[str, List[str]]) -> Union[str, List[str]]:
+    def _set_in_dict(self, config_dict: Dict[str, Union[str, List[str]]], key: str, value: Union[str, List[str]]) -> Union[None, str, List[str]]:
         """Set value in configuration dictionary using dot notation.
         
         Args:
@@ -132,64 +140,20 @@ class ConfigService(ServiceConfigProtocol):
         config[keys[-1]] = value
         return orig
     
-    def set_persistent(self, key: str, value: Union[Any, List[Any]]) -> None:
-        """Set persistent configuration value.
-        
-        Args:
-            key: Configuration key
-            value: Value to set
-        """
-        self.set(key, value, persistent=True)
-    
-    def set_temporary(self, key: str, value: Union[Any, List[Any]]) -> None:
+    def set_temporary(self, key: str, value: Union[str, List[str]], override: bool = False) -> Union[None, str, List[str]]:
         """Set temporary configuration value.
-        
+        合并 设置临时配置 和 set_if_not_default
+        通过这个接口，可以临时覆盖持久配置中的设置
         Args:
             key: Configuration key
             value: Value to set
-        """
-        self.set(key, value, persistent=False)
-    
-    def set_if_not_default(self, key: str, value: Union[str, List[str]], is_default: bool = False, persistent: bool = False) -> bool:
-        """Set configuration value only if conditions are met.
-        
-        Args:
-            key: Configuration key (supports dot notation)
-            value: Value to set
-            is_default: Whether the value being set is a default value
-            persistent: Whether to store in persistent config (default: temporary)
-            
-        Returns:
-            True if value was set, False if skipped
-            
-        Logic:
-        - If is_default=True and key has no value: set the value
-        - If is_default=True and key has value: skip (don't set)
-        - If is_default=False: always set the value
+            override: Whether to override existing value (default: False)
         """
         current_value = self.get(key)
-        
-        if is_default:
-            # If it's a default value and key already has a value, skip
-            if current_value is not None:
-                return False
-            # If it's a default value and key has no value, set it
-            self.set(key, value, persistent=persistent)
-            return True
-        else:
-            # If it's not a default value, always set it
-            self.set(key, value, persistent=persistent)
-            return True
-    
-    def remove(self, key: str, persistent: bool = False) -> None:
-        """Remove configuration value.
-        
-        Args:
-            key: Configuration key
-            persistent: Whether to remove from persistent config
-        """
-        target_config = self._persistent_config if persistent else self._temporary_config
-        self._remove_from_dict(target_config, key)
+        if override or current_value is None:
+            target_config = self._temporary_config
+            return self._set_in_dict(target_config, key, value)
+        return current_value
     
     def _remove_from_dict(self, config_dict: Dict[str, Any], key: str) -> None:
         """Remove value from configuration dictionary.
@@ -228,22 +192,6 @@ class ConfigService(ServiceConfigProtocol):
                 yaml.dump(self._persistent_config, f, default_flow_style=False, allow_unicode=True)
             else:
                 json.dump(self._persistent_config, f, indent=2, ensure_ascii=False)
-    
-    def get_persistent_config(self) -> Dict[str, Any]:
-        """Get persistent configuration as dictionary.
-        
-        Returns:
-            Persistent configuration dictionary
-        """
-        return copy.deepcopy(self._persistent_config)
-    
-    def get_temporary_config(self) -> Dict[str, Any]:
-        """Get temporary configuration as dictionary.
-        
-        Returns:
-            Temporary configuration dictionary
-        """
-        return copy.deepcopy(self._temporary_config)
     
     def get_merged_config(self) -> Dict[str, Any]:
         """Get merged configuration (persistent + temporary).

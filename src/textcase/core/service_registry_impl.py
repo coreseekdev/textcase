@@ -10,7 +10,7 @@ from zerorpc import gevent_zmq
 
 from .services import DefaultService, default_service_factory
 from .config import ConfigService
-from .service_registry_protocol import ServiceRegistry
+from ..proto.service_registry_protocol import ServiceRegistry
 
 # 确保 monkey patch
 monkey.patch_all()
