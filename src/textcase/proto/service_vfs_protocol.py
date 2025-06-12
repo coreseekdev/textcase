@@ -4,9 +4,14 @@ This module defines the protocol interface for VFS services.
 """
 
 from abc import ABC, abstractmethod
-from ast import Tuple
-from typing import Dict, List, Optional, Any
-from pathlib import PurePosixPath
+from typing import Dict, List, Optional, Any, Protocol, BinaryIO, Tuple
+from pathlib import PosixPath, PurePosixPath
+from enum import Enum
+
+class EntryType(Enum):
+    """Enumeration for file system entry types."""
+    FILE = "file"
+    DIR = "dir"
 
 class ServiceVFSProtocol(ABC):
     """Protocol interface for VFS services.
@@ -95,7 +100,7 @@ class ServiceVFSProtocol(ABC):
         ...
     
     @abstractmethod
-    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> Dict[str, Any]:
+    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PosixPath, EntryType]]:
         """List contents of a directory.
         
         Args:
@@ -166,7 +171,7 @@ class ServiceVFSProtocol(ABC):
         ...
     
     @abstractmethod
-    def commit(self, op_id: Optional[OperationId] = None, session_id: Optional[SessionId] = None) -> Dict[str, Any]:
+    def commit(self, message: str, op_id: Optional[OperationId] = None, session_id: Optional[SessionId] = None) -> Dict[str, Any]:
         """Commit patches.
         
         Args:
@@ -210,6 +215,186 @@ class ServiceVFSProtocol(ABC):
         
         Returns:
             List of active sessions
+        """
+        ...
+    
+
+class ChangeOperation(Protocol):
+    """Protocol for change operations in the edit manager.
+    
+    This protocol defines the interface for operations that can be
+    serialized to a changeset file.
+    """
+    
+    @property
+    def operation_type(self) -> str:
+        """Get the type of operation.
+        
+        Returns:
+            Operation type (e.g., 'session_create', 'patch', 'write')
+        """
+        ...
+    
+    @property
+    def timestamp(self) -> float:
+        """Get the timestamp of the operation.
+        
+        Returns:
+            Operation timestamp
+        """
+        ...
+    
+    def serialize(self) -> bytes:
+        """Serialize the operation to bytes.
+        
+        Returns:
+            Serialized operation
+        """
+        ...
+    
+    @classmethod
+    def deserialize(cls, data: bytes) -> 'ChangeOperation':
+        """Deserialize bytes to an operation.
+        
+        Args:
+            data: Serialized operation
+            
+        Returns:
+            Deserialized operation
+        """
+        ...
+
+
+class EditManagerProtocol(ABC):
+    """Protocol interface for edit manager.
+    
+    This protocol defines the interface for managing edit operations
+    and serializing them to a changeset file.
+    """
+    
+    @abstractmethod
+    def initialize(self, changeset_path: str) -> bool:
+        """Initialize the edit manager with a changeset file.
+        
+        Args:
+            changeset_path: Path to the changeset file
+            
+        Returns:
+            Success status
+        """
+        ...
+    
+    @abstractmethod
+    def create_session(self, metadata: Optional[Dict[str, Any]] = None) -> ServiceVFSProtocol.SessionId:
+        """Create a new edit session.
+        
+        Args:
+            metadata: Optional metadata for the session
+            
+        Returns:
+            Session ID
+        """
+        ...
+    
+    @abstractmethod
+    def commit_session(self, session_id: ServiceVFSProtocol.SessionId) -> bool:
+        """Commit an edit session.
+        
+        Args:
+            session_id: Session ID to commit
+            
+        Returns:
+            Success status
+        """
+        ...
+    
+    @abstractmethod
+    def rollback_session(self, session_id: ServiceVFSProtocol.SessionId) -> bool:
+        """Rollback an edit session.
+        
+        Args:
+            session_id: Session ID to rollback
+            
+        Returns:
+            Success status
+        """
+        ...
+    
+    @abstractmethod
+    def record_patch(self, 
+                    session_id: ServiceVFSProtocol.SessionId, 
+                    file_path: str, 
+                    range: Tuple[int, int], 
+                    content: bytes) -> ServiceVFSProtocol.OperationId:
+        """Record a patch operation.
+        
+        Args:
+            session_id: Session ID
+            file_path: Full path of the file to patch
+            range: Start and end positions of the range
+            content: Replacement content
+            
+        Returns:
+            Operation ID
+        """
+        ...
+    
+    @abstractmethod
+    def record_write(self, 
+                    session_id: ServiceVFSProtocol.SessionId, 
+                    file_path: str, 
+                    content: bytes) -> ServiceVFSProtocol.OperationId:
+        """Record a write operation.
+        
+        Args:
+            session_id: Session ID
+            file_path: Full path of the file to write
+            content: File content
+            
+        Returns:
+            Operation ID
+        """
+        ...
+    
+    @abstractmethod
+    def get_session_operations(self, session_id: ServiceVFSProtocol.SessionId) -> List[ChangeOperation]:
+        """Get all operations in a session.
+        
+        Args:
+            session_id: Session ID
+            
+        Returns:
+            List of operations
+        """
+        ...
+    
+    @abstractmethod
+    def get_operation(self, operation_id: ServiceVFSProtocol.OperationId) -> Optional[ChangeOperation]:
+        """Get an operation by ID.
+        
+        Args:
+            operation_id: Operation ID
+            
+        Returns:
+            Operation or None if not found
+        """
+        ...
+    
+    @abstractmethod
+    def flush(self) -> bool:
+        """Flush all changes to the changeset file.
+        
+        Returns:
+            Success status
+        """
+        ...
+    
+    @abstractmethod
+    def close(self) -> bool:
+        """Close the edit manager and release resources.
+        
+        Returns:
+            Success status
         """
         ...
     

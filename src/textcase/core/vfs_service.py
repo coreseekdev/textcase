@@ -2,6 +2,7 @@ from pathlib import PurePosixPath
 from typing import Dict, List, Optional, Tuple, Any
 import json
 import uuid
+from pathlib import Path, PurePosixPath
 from .vfs_resolver import PathResolver
 from ..proto.service_vfs_protocol import ServiceVFSProtocol
 

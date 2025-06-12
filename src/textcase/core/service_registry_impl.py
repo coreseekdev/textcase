@@ -151,3 +151,11 @@ class ServiceRegistryImpl(ServiceRegistry):
     def config_service(self) -> ConfigService:
         return self._config_service
 
+# For backward compatibility, provide a factory function
+def create_service_registry(config_file: Path) -> ServiceRegistry:
+    """Create a new ServiceRegistry instance.
+    
+    Returns:
+        ServiceRegistry implementation instance
+    """
+    return ServiceRegistryImpl(config_file)

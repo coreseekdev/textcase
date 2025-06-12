@@ -1,39 +1,38 @@
 from pathlib import PurePosixPath
 from typing import Dict, List, Optional, Tuple
 import os
-from .vfs import VFS, LocalFS, GitRepoFS, EditManager
+# Using the new VFS implementation
+from .vfs.local_vfs import LocalVFS
+from .vfs.git_vfs import GitVFS
+from .vfs.repo_vfs import RepoVFS
 
 
 class VFSResolver:
     """VFS resolver that creates VFS instances based on path patterns."""
     
     def __init__(self):
-        self.edit_manager: Optional[EditManager] = None
+        pass
     
-    def create_vfs(self, path: str) -> VFS:
+    def create_vfs(self, path: str):
         """Create a VFS instance based on the path.
         
         Args:
             path: File system path
             
         Returns:
-            VFS instance (LocalFS or GitRepoFS)
+            VFS instance (LocalVFS, GitVFS, or RepoVFS)
         """
         abs_path = os.path.abspath(path)
         
         # Check if it's a git repository
         if self._is_git_repo(abs_path):
-            return GitRepoFS(abs_path, self.edit_manager)
+            return RepoVFS(abs_path)
         else:
-            return LocalFS(abs_path, self.edit_manager)
+            return LocalVFS(abs_path)
     
     def _is_git_repo(self, path: str) -> bool:
         """Check if a path is a git repository."""
         return os.path.exists(os.path.join(path, '.git'))
-    
-    def set_edit_manager(self, edit_manager: EditManager) -> None:
-        """Set the edit manager for VFS instances."""
-        self.edit_manager = edit_manager
 
 
 class PathResolver:
@@ -41,7 +40,7 @@ class PathResolver:
     
     def __init__(self, root_path: str):
         self.root_path = os.path.abspath(root_path)
-        self.mounts: Dict[str, VFS] = {}
+        self.mounts: Dict[str, object] = {}  # Using object as a generic type for VFS instances
         self.vfs_resolver = VFSResolver()
         
         # Create edit manager for the root path
@@ -53,7 +52,7 @@ class PathResolver:
         root_vfs = self.vfs_resolver.create_vfs(self.root_path)
         self.mounts['/'] = root_vfs
     
-    def resolve_path(self, path: PurePosixPath) -> Tuple[VFS, PurePosixPath]:
+    def resolve_path(self, path: PurePosixPath) -> Tuple[object, PurePosixPath]:
         """Resolve a path to a VFS and remaining path.
         
         Args:
