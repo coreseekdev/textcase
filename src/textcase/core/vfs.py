@@ -75,7 +75,7 @@ class EditManager:
         self.operations: Dict[str, Dict] = {}
         os.makedirs(patches_dir, exist_ok=True)
     
-    def create_session(self, session_id: str, timeout: Optional[int] = None) -> EditSession:
+    def create_session(self, timeout: Optional[int] = None) -> EditSession:
         """Create a new edit session."""
         session = EditSession(session_id, timeout)
         self.sessions[session_id] = session

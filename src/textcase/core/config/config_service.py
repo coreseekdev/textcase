@@ -140,14 +140,14 @@ class ConfigService(ServiceConfigProtocol):
         config[keys[-1]] = value
         return orig
     
-    def set_temporary(self, key: str, value: Union[str, List[str]], override: bool = False) -> Union[None, str, List[str]]:
+    def set_temporary(self, key: str, value: Union[str, List[str]], override: bool = True) -> Union[None, str, List[str]]:
         """Set temporary configuration value.
         合并 设置临时配置 和 set_if_not_default
         通过这个接口，可以临时覆盖持久配置中的设置
         Args:
             key: Configuration key
             value: Value to set
-            override: Whether to override existing value (default: False)
+            override: Whether to override existing value (default: True)
         """
         current_value = self.get(key)
         if override or current_value is None:

@@ -16,8 +16,7 @@ class ServiceRegistry(Protocol):
     
     def get_service(self, 
                    service_name: str, 
-                   endpoint: Optional[str] = None,
-                   service_factory: Optional[Callable[[str, 'ServiceRegistry'], Any]] = None) -> Any:
+                   endpoint: Optional[str] = None) -> Any:
         """Get or create a service.
         
         For 'config' service, returns ConfigService instance directly.
@@ -26,7 +25,6 @@ class ServiceRegistry(Protocol):
         Args:
             service_name: Name of the service to get or create
             endpoint: Optional endpoint for RPC services
-            service_factory: Optional factory function for creating services
             
         Returns:
             Service instance (for config) or endpoint string (for RPC services)

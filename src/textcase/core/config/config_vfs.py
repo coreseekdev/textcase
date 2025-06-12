@@ -46,7 +46,7 @@ class VFSConfig:
     def _load_defaults(self) -> None:
         """Load default VFS configuration values."""
         for key, value in self.defaults.items():
-            self.config.set_if_not_default(key, value, is_default=True, persistent=True)
+            self.config.set_temporary (key, value, override==False)
     
     def load_from_env(self, prefix: str = "TCE_VFS_") -> None:
         """Load VFS configuration from environment variables.
@@ -77,11 +77,10 @@ class VFSConfig:
         # Normalize and validate path
         normalized_path = os.path.abspath(os.path.expanduser(root_path))
         
-        return self.config.set_if_not_default(
+        return self.config.set_temporary(
             'vfs.root_path', 
             normalized_path, 
-            is_default=is_default, 
-            persistent=not is_default
+            override=not is_default
         )
     
     def get_root_path(self) -> str:

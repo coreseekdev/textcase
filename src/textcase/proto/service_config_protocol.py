@@ -43,13 +43,13 @@ class ServiceConfigProtocol(ABC):
         ...
     
     @abstractmethod
-    def set_temporary(self, key: str, value: Union[str, List[str]], override: bool = False) -> Union[None,str, List[str]]:
+    def set_temporary(self, key: str, value: Union[str, List[str]], override: bool = True) -> Union[None,str, List[str]]:
         """Set temporary configuration value.
         
         Args:
             key: Configuration key
             value: Value to set
-            override: Whether to override existing value (default: False)
+            override: Whether to override existing value (default: True)
         """
         ...
     

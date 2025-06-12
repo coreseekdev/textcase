@@ -8,7 +8,7 @@ from gevent import monkey
 import zerorpc
 from zerorpc import gevent_zmq
 
-from .services import DefaultService, default_service_factory
+from .services import DefaultService, get_service_factory
 from .config import ConfigService
 from ..proto.service_registry_protocol import ServiceRegistry
 
@@ -53,8 +53,8 @@ class ServiceRegistryImpl(ServiceRegistry):
 
     def _generate_endpoint(self, service_name: str) -> str:
         """Generate a unique endpoint for a service."""
-        # return f"inproc://{service_name}-{uuid.uuid4().hex}"
-        return f"inproc://{service_name}"
+        return f"inproc://{service_name}-{uuid.uuid4().hex}"
+        # return f"inproc://{service_name}"
 
     def _run_service(self, service_info: ServiceInfo) -> None:
         """Run the service in a gevent greenlet."""
@@ -68,17 +68,12 @@ class ServiceRegistryImpl(ServiceRegistry):
     
     def get_service(self, 
                    service_name: str, 
-                   endpoint: Optional[str] = None,
-                   service_factory: Optional[Callable[[str, 'ServiceRegistry'], Any]] = default_service_factory) -> Any:
+                   endpoint: Optional[str] = None) -> Any:
         """Get or create a service.
         
         For 'config' service, returns ConfigService instance directly.
         For other services, returns RPC endpoint string.
-        """
-        # Special handling for config service
-        if service_name == "config":
-            return self.get_config_service()
-            
+        """            
         if service_name in self._services:
             return self._services[service_name].endpoint
             
@@ -87,7 +82,12 @@ class ServiceRegistryImpl(ServiceRegistry):
             endpoint = self._generate_endpoint(service_name)
         
         # Create service instance if factory is provided
-        service_instance = service_factory(service_name, self) if service_factory else DefaultService()
+        service_factory = get_service_factory(service_name)
+        if service_factory:
+            service_instance = service_factory(service_name, self)
+        else:
+            # 没有照顾 service_name 对应服务的构建方式
+            return None
         
         # Create and configure the server
         server = zerorpc.Server(service_instance)

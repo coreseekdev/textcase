@@ -9,7 +9,7 @@ from ..proto.service_vfs_protocol import ServiceVFSProtocol
 class VFSService(ServiceVFSProtocol):
     """VFS service that provides RPC interface for virtual file system operations."""
     
-    def __init__(self, root_path: str):
+    def __init__(self, name: str, root_path: Path):
         self.path_resolver = PathResolver(root_path)
         self.sessions: Dict[str, str] = {}  # session_id -> session_name mapping
     
