@@ -3,7 +3,7 @@ import logging
 import atexit
 import uuid
 from pathlib import Path
-from typing import Dict, Optional, Any, Callable
+from typing import Dict, Optional, Any, Callable, Union
 import gevent
 from gevent import monkey
 import zerorpc

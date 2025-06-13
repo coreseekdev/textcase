@@ -13,7 +13,6 @@ from weakref import WeakValueDictionary
 
 from .core.config.config_service import ConfigService
 from .core.config.config_vfs import setup_vfs_config
-from .core.vfs_service import VFSService
 from .service.service_registry_impl import create_service_registry
 from .scm.git import find_git_repo_root
 
@@ -113,21 +112,25 @@ class TextCase:
             load_env=self._config_service.get('vfs.load_env', True)
         )
         
+        # Set vfs.repo_path as a alias of vfs.root_path
+        self._config_service.set_temporary('vfs.repo_path', self.repo_root_path)
+        
         # root_path / '.textcase.yml' 的配置，用于初始化 文档/资源 管理器， 此处不需要
         
         # Create service registry
         self.service_registry = create_service_registry(self._config_service)
         
-        # Initialize VFS service ， vfs 会通过 已经配置过的 vfs_config 读取 root_path
-        self.vfs = self.service_registry.get_service('vfs')
+        # VFS service will be initialized when needed
+        self._vfs_endpoint = None
         
     def start_services(self) -> None:
         """Start all services."""
-        self.vfs.start()
+        self._vfs_endpoint = self.service_registry.get_service('vfs')
         
     def stop_services(self) -> None:
         """Stop all services."""
-        self.vfs.stop()
+        self.service_registry.stop_service('vfs')
+        self._vfs_endpoint = None
         
     def get_vfs_endpoint(self) -> str:
         """Get VFS service endpoint.
@@ -135,7 +138,24 @@ class TextCase:
         Returns:
             VFS service endpoint
         """
-        return self.service_registry.get_service('vfs')
+        if self._vfs_endpoint is None:
+            self._vfs_endpoint = self.service_registry.get_service('vfs')
+        return self._vfs_endpoint
+        
+    @property
+    def vfs(self):
+        """Get VFS client for interacting with VFS service.
+        
+        Returns:
+            VFS client instance
+        """
+        # Import here to avoid circular imports
+        import zerorpc
+        
+        endpoint = self.get_vfs_endpoint()
+        client = zerorpc.Client()
+        client.connect(endpoint)
+        return client
         
     def get_config_value(self, key: str, default: Any = None) -> Any:
         """Get configuration value.

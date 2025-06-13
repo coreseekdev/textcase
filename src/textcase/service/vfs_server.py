@@ -295,7 +295,7 @@ def create_vfs_service(service_name:str, service_registry: ServiceRegistry) -> V
     Returns:
         VFS service instance
     """
-    repo_path = service_registry.config_service.get("vfs.repo_path", None)
+    repo_path = service_registry.config_service.get("vfs.root_path", None)
     if repo_path is None:
         raise ValueError("VFS repo_path not set in config service")
     return VFSServer(service_name, repo_path)

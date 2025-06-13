@@ -1,5 +1,5 @@
 from typing import Any, Dict, Callable, Optional, TYPE_CHECKING
-from ..core.vfs_service import VFSService, create_vfs_service
+from .vfs_server import create_vfs_service
 from ..core.config import ConfigService
 
 if TYPE_CHECKING:
