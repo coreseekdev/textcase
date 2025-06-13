@@ -17,22 +17,25 @@ logger = logging.getLogger(__name__)
 class GitRepoInfo:
     """Information about a Git repository."""
     
-    def __init__(self, repo_root: str, is_submodule: bool = False, 
-                 submodule_info: Optional[Dict[str, Any]] = None):
+    def __init__(self, module_root: str, is_submodule: bool = False, 
+                 submodule_info: Optional[Dict[str, Any]] = None,
+                 repo_root: Optional[str] = None):
         """
         Initialize Git repository information.
         
         Args:
-            repo_root: Path to the repository root (where .git is located)
+            module_root: Path to the module root (where .git is located)
             is_submodule: Whether this is a submodule
             submodule_info: Additional submodule information if applicable
+            root_repo: Path to the root repository (top-level, non-submodule repo)
         """
-        self.repo_root = os.path.abspath(repo_root)
-        self.is_submodule = is_submodule
+        self.module_root = os.path.abspath(module_root)
+        self.is_submodule = is_submodule    
         self.submodule_info = submodule_info or {}
+        self.repo_root = os.path.abspath(repo_root) if repo_root else self.module_root
     
     def __repr__(self):
-        return f"GitRepoInfo(repo_root='{self.repo_root}', is_submodule={self.is_submodule})"
+        return f"GitRepoInfo(module_root='{self.module_root}', is_submodule={self.is_submodule}, repo_root='{self.repo_root}')"
 
 
 def find_git_repo_root(path: str) -> Optional[GitRepoInfo]:
@@ -58,7 +61,12 @@ def find_git_repo_root(path: str) -> Optional[GitRepoInfo]:
     
     # Try pygit2 first
     try:
-        return _find_git_repo_with_pygit2(abs_path)
+        result = _find_git_repo_with_pygit2(abs_path)
+        if result is not None:
+            return result
+        # If pygit2 returns None, try directory search as fallback
+        logger.debug("pygit2 returned None, falling back to directory detection")
+        return _find_git_repo_with_directory_search(abs_path)
     except ImportError:
         logger.debug("pygit2 not available, falling back to directory detection")
         return _find_git_repo_with_directory_search(abs_path)
@@ -113,6 +121,17 @@ def _find_git_repo_with_pygit2(path: str) -> Optional[GitRepoInfo]:
                     git_content = f.read().strip()
                     if git_content.startswith('gitdir: '):
                         git_dir = git_content[8:].strip()
+                        
+                        # Resolve relative path if needed
+                        if not os.path.isabs(git_dir):
+                            git_dir = os.path.join(repo_root, git_dir)
+                        git_dir = os.path.normpath(git_dir)
+                        
+                        # Verify the git directory exists
+                        if not os.path.exists(git_dir):
+                            logger.debug(f"Git directory does not exist: {git_dir}")
+                            return None  # Invalid submodule
+                        
                         submodule_info['git_dir'] = git_dir
                         
                         # Try to find parent repository
@@ -134,8 +153,12 @@ def _find_git_repo_with_pygit2(path: str) -> Optional[GitRepoInfo]:
                                 logger.debug(f"Could not get submodule info from parent repo: {e}")
             except Exception as e:
                 logger.debug(f"Could not read .git file: {e}")
+                return None  # Invalid submodule
         
-        return GitRepoInfo(repo_root, is_submodule, submodule_info)
+        # Find root repository
+        root_repo = _find_root_repo(repo_root)
+        
+        return GitRepoInfo(repo_root, is_submodule, submodule_info, root_repo)
         
     except pygit2.GitError as e:
         logger.debug(f"pygit2 GitError: {e}")
@@ -171,6 +194,17 @@ def _find_git_repo_with_directory_search(path: str) -> Optional[GitRepoInfo]:
                         git_content = f.read().strip()
                         if git_content.startswith('gitdir: '):
                             git_dir = git_content[8:].strip()
+                            
+                            # Resolve relative path if needed
+                            if not os.path.isabs(git_dir):
+                                git_dir = os.path.join(repo_root, git_dir)
+                            git_dir = os.path.normpath(git_dir)
+                            
+                            # Verify the git directory exists
+                            if not os.path.exists(git_dir):
+                                logger.debug(f"Git directory does not exist: {git_dir}")
+                                continue  # Skip this .git file, continue searching
+                            
                             submodule_info['git_dir'] = git_dir
                             
                             # Try to find parent repository
@@ -186,8 +220,12 @@ def _find_git_repo_with_directory_search(path: str) -> Optional[GitRepoInfo]:
                                     submodule_info['gitmodules_exists'] = True
                 except Exception as e:
                     logger.debug(f"Could not read .git file: {e}")
+                    continue  # Skip this .git file, continue searching
             
-            return GitRepoInfo(repo_root, is_submodule, submodule_info)
+            # Find root repository
+            root_repo = _find_root_repo(repo_root)
+            
+            return GitRepoInfo(repo_root, is_submodule, submodule_info, root_repo)
     
     return None
 
@@ -204,14 +242,45 @@ def _find_parent_repo(submodule_path: str) -> Optional[str]:
     """
     current_path = Path(submodule_path).resolve().parent
     
-    # Traverse up to find a parent .git directory
+    # Traverse up to find a parent .git directory (not file)
     for parent in [current_path] + list(current_path.parents):
         git_path = parent / '.git'
         
+        # Look for .git directory (not file, which would be another submodule)
         if git_path.exists() and git_path.is_dir():
             return str(parent)
     
     return None
+
+
+def _find_root_repo(repo_path: str) -> str:
+    """
+    Find the root repository by traversing up the submodule chain.
+    
+    Args:
+        repo_path: Path to start searching from
+        
+    Returns:
+        Path to the root (top-level, non-submodule) repository
+    """
+    current_repo = repo_path
+    
+    while True:
+        # Check if current repo is a submodule
+        git_path = os.path.join(current_repo, '.git')
+        if not os.path.isfile(git_path):
+            # This is not a submodule, it's the root repo
+            return current_repo
+        
+        # Find parent repo
+        parent_repo = _find_parent_repo(current_repo)
+        if not parent_repo:
+            # No parent found, current repo is the root
+            return current_repo
+        
+        current_repo = parent_repo
+    
+    return current_repo
 
 
 def is_git_repo(path: str) -> bool:
