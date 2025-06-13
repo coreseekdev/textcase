@@ -1,6 +1,7 @@
 # src/textcase/core/service_registry.py
 import logging
 import atexit
+import uuid
 from pathlib import Path
 from typing import Dict, Optional, Any, Callable
 import gevent
@@ -8,17 +9,12 @@ from gevent import monkey
 import zerorpc
 from zerorpc import gevent_zmq
 
-from .services import DefaultService, get_service_factory
+from .services import get_service_factory
 from ..core.config import ConfigService
 from ..proto.service_registry_protocol import ServiceRegistry
 
 # 确保 monkey patch
 monkey.patch_all()
-
-class DefaultService:
-    def name(self):
-        """Simple hello method for testing the RPC service"""
-        return "DefaultService"
 
 class ServiceInfo:
     """Container for service information."""

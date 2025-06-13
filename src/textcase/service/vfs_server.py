@@ -1,0 +1,286 @@
+"""VFS Server implementation for zerorpc.
+
+This module provides a zerorpc-compatible VFS server that wraps
+the existing VFS implementations and handles exception serialization
+for proper client-side reconstruction.
+"""
+
+import json
+import traceback
+from pathlib import PurePosixPath
+from typing import Dict, List, Optional, Tuple, Any, Union
+
+from ..core.vfs.repo_vfs import RepoVFS
+from ..proto.service_vfs_protocol import ServiceVFSProtocol, EntryType
+
+
+class VFSServerException(Exception):
+    """Custom exception for VFS server errors.
+    
+    This exception carries the original exception type and message
+    for proper reconstruction on the client side.
+    """
+    
+    def __init__(self, exception_type: str, message: str, traceback_str: str = None):
+        self.exception_type = exception_type
+        self.original_message = message
+        self.traceback_str = traceback_str
+        super().__init__(f"{exception_type}: {message}")
+    
+    def to_dict(self) -> Dict[str, str]:
+        """Convert exception to dictionary for serialization."""
+        return {
+            'exception_type': self.exception_type,
+            'message': self.original_message,
+            'traceback': self.traceback_str or ''
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, str]) -> 'VFSServerException':
+        """Create exception from dictionary."""
+        return cls(
+            data['exception_type'],
+            data['message'],
+            data.get('traceback', '')
+        )
+
+
+class VFSServer:
+    """VFS Server wrapper for zerorpc compatibility.
+    
+    This server wraps VFS implementations and provides zerorpc-compatible
+    interfaces while preserving exception information for client reconstruction.
+    """
+    
+    def __init__(self, repo_path: str):
+        """Initialize VFS server.
+        
+        Args:
+            repo_path: Path to the repository
+        """
+        self.repo_path = repo_path
+        self._vfs = RepoVFS(repo_path)
+    
+    def _handle_exception(self, e: Exception) -> VFSServerException:
+        """Convert exception to VFSServerException for serialization.
+        
+        Args:
+            e: Original exception
+            
+        Returns:
+            VFSServerException with original exception info
+        """
+        exception_type = type(e).__name__
+        message = str(e)
+        traceback_str = traceback.format_exc()
+        
+        return VFSServerException(exception_type, message, traceback_str)
+    
+    def _convert_path(self, path: Union[str, PurePosixPath]) -> PurePosixPath:
+        """Convert path to PurePosixPath if needed.
+        
+        Args:
+            path: Path as string or PurePosixPath
+            
+        Returns:
+            PurePosixPath object
+        """
+        if isinstance(path, str):
+            return PurePosixPath(path)
+        return path
+    
+    def _convert_entry_type(self, entry_type: EntryType) -> str:
+        """Convert EntryType enum to string.
+        
+        Args:
+            entry_type: EntryType enum value
+            
+        Returns:
+            String representation
+        """
+        return entry_type.value
+    
+    def name(self) -> str:
+        """Get the name of the VFS service.
+        
+        Returns:
+            Service name
+        """
+        try:
+            return self._vfs.name()
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def readonly(self) -> bool:
+        """Check if the VFS is read-only.
+        
+        Returns:
+            True if read-only, False otherwise
+        """
+        try:
+            return self._vfs.readonly()
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def info(self, path: str) -> Dict[str, Any]:
+        """Get information about a path.
+        
+        Args:
+            path: Path to get info for
+            
+        Returns:
+            Path information
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.info(posix_path)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def list(self, path: str, option: Optional[Dict[str, Any]] = None) -> List[Tuple[str, str]]:
+        """List contents of a directory.
+        
+        Args:
+            path: Directory path to list
+            option: Optional listing options
+            
+        Returns:
+            List of (path, entry_type) tuples as strings
+        """
+        try:
+            posix_path = self._convert_path(path)
+            if option is None:
+                option = {}
+            
+            entries = self._vfs.list(posix_path, option)
+            
+            # Convert results to string tuples
+            result = []
+            for entry_path, entry_type in entries:
+                path_str = str(entry_path)
+                type_str = self._convert_entry_type(entry_type)
+                result.append((path_str, type_str))
+            
+            return result
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def get(self, path: str) -> bytes:
+        """Get file contents.
+        
+        Args:
+            path: File path to read
+            
+        Returns:
+            File contents as bytes
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.get(posix_path)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def get_text(self, path: str, encoding: str = 'utf-8') -> Optional[str]:
+        """Get file contents as text.
+        
+        Args:
+            path: File path to read
+            encoding: Text encoding to use
+            
+        Returns:
+            File contents as text, or None if failed
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.get_text(posix_path, encoding)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def put(self, path: str, content: bytes, create_if_missing: bool = False) -> bool:
+        """Put file contents.
+        
+        Args:
+            path: File path to write
+            content: File content as bytes
+            create_if_missing: Create file if it doesn't exist
+            
+        Returns:
+            Success status
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.put(posix_path, content, create_if_missing)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def patch(self, path: str, range_tuple: Tuple[int, int], content: bytes, 
+              session_id: Optional[str] = None) -> str:
+        """Apply a patch to a file.
+        
+        Args:
+            path: File path to patch
+            range_tuple: (start, end) position tuple
+            content: Replacement content
+            session_id: Optional session ID
+            
+        Returns:
+            Operation ID
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.patch(posix_path, range_tuple, content, session_id)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def commit(self, message: str, op_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Commit patches.
+        
+        Args:
+            message: Commit message
+            op_id: Optional operation ID
+            session_id: Optional session ID
+            
+        Returns:
+            Commit status and message
+        """
+        try:
+            return self._vfs.commit(message, op_id, session_id)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def abort(self, op_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Abort patches.
+        
+        Args:
+            op_id: Optional operation ID
+            session_id: Optional session ID
+            
+        Returns:
+            Abort status and message
+        """
+        try:
+            return self._vfs.abort(op_id, session_id)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def create_session(self) -> str:
+        """Create a new edit session.
+        
+        Returns:
+            Session ID
+        """
+        try:
+            return self._vfs.create_session()
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def list_sessions(self) -> List[str]:
+        """List all active sessions.
+        
+        Returns:
+            List of active session IDs
+        """
+        try:
+            return self._vfs.list_sessions()
+        except Exception as e:
+            raise self._handle_exception(e)

@@ -1,5 +1,5 @@
 from typing import Any, Dict, Callable, Optional, TYPE_CHECKING
-from .vfs_service import VFSService
+from ..core.vfs_service import VFSService
 from ..core.config import ConfigService
 
 if TYPE_CHECKING:
@@ -26,9 +26,14 @@ def create_vfs_service(service_name: str, service_registry: 'ServiceRegistry') -
     Returns:
         VFSService instance
     """
-    # Use current directory as default root path
-    # VFS services should get their configuration from the service registry
-    return VFSService('.')
+    # Get repo path from service registry config or use current directory as default
+    config_service = service_registry.get_service('config') if hasattr(service_registry, 'get_service') else None
+    repo_path = '.'
+    
+    if config_service and hasattr(config_service, 'get'):
+        repo_path = config_service.get('vfs.repo_path', '.')
+    
+    return VFSService(repo_path)
 
 # Service registry for mapping service names to factory functions
 _service_factories: Dict[str, Callable[[str, 'ServiceRegistry'], Any]] = {

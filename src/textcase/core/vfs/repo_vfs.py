@@ -107,7 +107,7 @@ class RepoVFS(ServiceVFSProtocol):
         """
         return self._local_vfs.info(path)
     
-    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> Dict[str, Any]:
+    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PosixPath, EntryType]]:
         """List contents of a directory.
         
         Args:

@@ -37,30 +37,17 @@ def cmd_ls(vfs, args):
     options = {}
     
     try:
-        # Call the list method with the provided path
-        if isinstance(vfs, VFSClient):
-            # VFS client returns list of (path, entry_type) as strings
-            entries = vfs.list(path, options)
-        else:
-            # RepoVFS returns list of (PurePosixPath, EntryType)
-            entries = vfs.list(PurePosixPath(path), options)
+        # VFSClient accepts string paths and returns (PosixPath, EntryType) tuples
+        # RepoVFS needs PurePosixPath and returns (PurePosixPath, EntryType) tuples
+        entries = vfs.list(PurePosixPath(path), options)
         
         # Print the directory contents
         print(f"Contents of {args.path}:")
         for entry_path, entry_type in entries:
-            # Handle different return types
-            if isinstance(vfs, VFSClient):
-                # VFS client returns strings
-                if entry_type == "dir":
-                    print(f"[DIR]  {entry_path}")
-                else:
-                    print(f"[FILE] {entry_path}")
+            if entry_type == EntryType.DIR:
+                print(f"[DIR]  {entry_path}")
             else:
-                # RepoVFS returns EntryType enum
-                if entry_type == EntryType.DIR:
-                    print(f"[DIR]  {entry_path}")
-                else:
-                    print(f"[FILE] {entry_path}")
+                print(f"[FILE] {entry_path}")
     except Exception as e:
         print(f"Error listing directory: {e}")
         return 1
@@ -76,13 +63,8 @@ def cmd_get(vfs, args):
         args: Command line arguments
     """
     try:
-        # Get file contents as text
-        if isinstance(vfs, VFSClient):
-            # VFS client expects string path
-            content = vfs.get_text(args.path)
-        else:
-            # RepoVFS expects PurePosixPath
-            content = vfs.get_text(PurePosixPath(args.path))
+        # VFSClient accepts string paths, RepoVFS needs PurePosixPath
+        content = vfs.get_text(PurePosixPath(args.path))
             
         if content is not None:
             print(content)
@@ -106,13 +88,8 @@ def cmd_put(vfs, args):
     content = args.content.encode('utf-8')  # Convert string to bytes
     
     try:
-        # Write content to the file
-        if isinstance(vfs, VFSClient):
-            # VFS client expects string path
-            success = vfs.put(args.path, content, create_if_missing=True)
-        else:
-            # RepoVFS expects PurePosixPath
-            success = vfs.put(PurePosixPath(args.path), content, create_if_missing=True)
+        # VFSClient accepts string paths, RepoVFS needs PurePosixPath
+        success = vfs.put(PurePosixPath(args.path), content, create_if_missing=True)
             
         if success:
             print(f"Successfully wrote to {args.path}")
@@ -124,7 +101,6 @@ def cmd_put(vfs, args):
         return 1
     
     return 0
-
 
 def main():
     """Main entry point for the VFS CLI tool."""
