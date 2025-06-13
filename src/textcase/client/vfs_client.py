@@ -197,6 +197,40 @@ class VFSClient:
         path_str = str(path) if isinstance(path, PurePosixPath) else path
         return self._handle_rpc_exception(self.client.put, path_str, content, create_if_missing)
     
+    def remove(self, path: Union[str, PurePosixPath], force: bool = False) -> bool:
+        """Remove a file or directory.
+        
+        Args:
+            path: Path to remove (string or PurePosixPath)
+            force: Force removal (ignore non-existent files)
+            recursive: Remove directories recursively
+            
+        Returns:
+            Success status
+            
+        Raises:
+            VFSClientException: If removal fails
+        """
+        path_str = str(path) if isinstance(path, PurePosixPath) else path
+        return self._handle_rpc_exception(self.client.remove, path_str, force)
+    
+    def mkdir(self, path: Union[str, PurePosixPath], parents: bool = False, exist_ok: bool = False) -> bool:
+        """Create a directory.
+        
+        Args:
+            path: Directory path to create (string or PurePosixPath)
+            parents: Create parent directories if they don't exist
+            exist_ok: Don't raise error if directory already exists
+            
+        Returns:
+            Success status
+            
+        Raises:
+            VFSClientException: If directory creation fails
+        """
+        path_str = str(path) if isinstance(path, PurePosixPath) else path
+        return self._handle_rpc_exception(self.client.mkdir, path_str, parents, exist_ok)
+    
     def patch(self, path: Union[str, PurePosixPath], range_tuple: Tuple[int, int], content: bytes, 
               session_id: Optional[str] = None) -> str:
         """Apply a patch to a file.

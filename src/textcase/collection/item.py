@@ -211,11 +211,8 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         try:
             # Check if file exists before attempting to delete
             if self.exists():
-                # Note: VFS client doesn't seem to have a delete method in the interface
-                # We'll need to handle this through the VFS implementation
-                # For now, we'll assume there's a way to delete files
-                pass  # TODO: Implement file deletion when VFS supports it
-        except Exception as e:
+                self._vfs.remove(file_path, force=True)
+        except VFSClientException as e:
             raise VFSClientException(
                 'ItemDeleteError',
                 f'Failed to delete item file {file_path}: {e}'

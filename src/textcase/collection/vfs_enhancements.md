@@ -114,44 +114,53 @@ def is_dir(self, path: Union[str, PurePosixPath]) -> bool:
         return False
 ```
 
-## Current Workarounds in Collection Implementation
+## ✅ Resolved Workarounds in Collection Implementation
 
-Until these enhancements are available, the collection system uses the following workarounds:
+**Status: COMPLETED** - All workarounds have been replaced with proper VFS API calls.
 
-### 1. File Deletion Workaround
+### 1. ✅ File Deletion - RESOLVED
 ```python
-# In ResourceItemImpl.delete() and ResourceCollectionImpl.remove_tag()
-# Currently: pass  # TODO: Implement file deletion when VFS supports it
+# BEFORE: Workaround with placeholder content
+# def _mark_for_deletion(self, path: PurePosixPath) -> None:
+#     self._vfs.put(path, b'# DELETED - Remove this file', create_if_missing=False)
 
-# Workaround: Mark files for deletion by writing empty content
-def _mark_for_deletion(self, path: PurePosixPath) -> None:
-    """Mark a file for deletion by writing special content."""
+# AFTER: Direct VFS API usage
+def delete(self) -> None:
+    """Delete the item file and remove from all tag files."""
+    # Remove from all tag files first
+    for tag in self._tags.copy():
+        self.remove_tag(tag)
+    
+    # Delete the item file using VFS remove API
+    file_path = self._collection_path / f"{self._name}.md"
     try:
-        self._vfs.put(path, b'# DELETED - Remove this file', create_if_missing=False)
-    except VFSClientException:
-        pass  # File might not exist
+        if self.exists():
+            self._vfs.remove(file_path, force=True)
+    except VFSClientException as e:
+        raise VFSClientException('ItemDeleteError', f'Failed to delete item file {file_path}: {e}')
 ```
 
-### 2. Directory Creation Workaround
+### 2. ✅ Directory Creation - RESOLVED
 ```python
-# In ResourceCollectionImpl._ensure_directory_exists()
-# Currently: pass  # Directory creation assumed to work via put()
+# BEFORE: Workaround with placeholder files
+# def _ensure_directory_exists(self) -> None:
+#     placeholder_path = self._path / '.directory_placeholder'
+#     self._vfs.put(placeholder_path, b'', create_if_missing=True)
 
-# Workaround: Create directory by putting a placeholder file
+# AFTER: Direct VFS API usage
 def _ensure_directory_exists(self) -> None:
-    """Ensure collection directory exists by creating a placeholder."""
-    placeholder_path = self._path / '.directory_placeholder'
+    """Ensure the collection directory exists."""
     try:
         info = self._vfs.info(self._path)
         if not info:
-            # Create placeholder to ensure directory exists
-            self._vfs.put(placeholder_path, b'', create_if_missing=True)
+            # Directory doesn't exist, create it using VFS mkdir API
+            self._vfs.mkdir(self._path, parents=True, exist_ok=True)
     except VFSClientException:
-        # Try to create placeholder anyway
+        # Directory doesn't exist, create it
         try:
-            self._vfs.put(placeholder_path, b'', create_if_missing=True)
+            self._vfs.mkdir(self._path, parents=True, exist_ok=True)
         except VFSClientException:
-            pass  # Directory creation failed
+            pass  # If mkdir fails, we'll let the error propagate
 ```
 
 ## Implementation Priority

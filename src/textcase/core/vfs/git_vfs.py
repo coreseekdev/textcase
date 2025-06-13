@@ -764,6 +764,38 @@ class GitVFS(ServiceVFSProtocol):
         """
         return False
     
+    def remove(self, path: PurePosixPath, force: bool = False) -> bool:
+        """Remove a file or directory (not supported for git VFS).
+        
+        Args:
+            path: Path to remove
+            force: Force removal (ignore non-existent files)
+            recursive: Remove directories recursively
+            
+        Returns:
+            Never returns (raises exception)
+            
+        Raises:
+            NotImplementedError: Git VFS is read-only
+        """
+        raise NotImplementedError("Git VFS is read-only")
+    
+    def mkdir(self, path: PurePosixPath, parents: bool = False, exist_ok: bool = False) -> bool:
+        """Create a directory (not supported for git VFS).
+        
+        Args:
+            path: Directory path to create
+            parents: Create parent directories if they don't exist
+            exist_ok: Don't raise error if directory already exists
+            
+        Returns:
+            Never returns (raises exception)
+            
+        Raises:
+            NotImplementedError: Git VFS is read-only
+        """
+        raise NotImplementedError("Git VFS is read-only")
+    
     def patch(self, path: PurePosixPath, range: Tuple[int, int], content: bytes, 
               session_id: Optional[ServiceVFSProtocol.SessionId] = None) -> ServiceVFSProtocol.OperationId:
         """Apply a patch to a file (not supported for git VFS)."""

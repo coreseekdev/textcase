@@ -155,6 +155,40 @@ class RepoVFS(ServiceVFSProtocol):
         """
         return self._local_vfs.put(path, content, create_if_missing)
     
+    def remove(self, path: PurePosixPath, force: bool = False) -> bool:
+        """Remove a file or directory.
+        
+        Args:
+            path: Path to remove
+            force: Force removal (ignore non-existent files)
+            
+        Returns:
+            Success status
+            
+        Raises:
+            OSError: If directory is not empty and recursive=False
+            PermissionError: If VFS is readonly
+        """
+        return self._local_vfs.remove(path, force)
+    
+    def mkdir(self, path: PurePosixPath, parents: bool = False, exist_ok: bool = False) -> bool:
+        """Create a directory.
+        
+        Args:
+            path: Directory path to create
+            parents: Create parent directories if they don't exist
+            exist_ok: Don't raise error if directory already exists
+            
+        Returns:
+            Success status
+            
+        Raises:
+            FileExistsError: If directory exists and exist_ok=False
+            FileNotFoundError: If parent doesn't exist and parents=False
+            PermissionError: If VFS is readonly
+        """
+        return self._local_vfs.mkdir(path, parents, exist_ok)
+    
     def patch(self, path: PurePosixPath, range: Tuple[int, int], content: bytes, 
               session_id: Optional[ServiceVFSProtocol.SessionId] = None) -> ServiceVFSProtocol.OperationId:
         """Apply a patch to a file.

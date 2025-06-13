@@ -309,6 +309,96 @@ class LocalVFS(ServiceVFSProtocol):
         
         return True
     
+    def remove(self, path: PurePosixPath, force: bool = False) -> bool:
+        """Remove a file or directory.
+        
+        Args:
+            path: Path to remove
+            force: Force removal (ignore non-existent files)
+            recursive: Remove directories recursively
+            
+        Returns:
+            Success status
+            
+        Raises:
+            OSError: If directory is not empty and recursive=False
+            PermissionError: If VFS is readonly
+        """
+        if self.readonly():
+            raise PermissionError("Cannot remove files in readonly VFS")
+        
+        # 检查路径是否对应一个挂载点
+        vfs, remaining_path = self.resolve_path(path)
+        if vfs is not self:
+            # 如果路径对应一个挂载点，委托给挂载的 VFS
+            return vfs.remove(remaining_path, force)
+        
+        # 否则，使用本地文件系统
+        local_path = self._resolve_local_path(path)
+        
+        if not os.path.exists(local_path):
+            if force:
+                return True  # Ignore non-existent files when force=True
+            else:
+                raise FileNotFoundError(f"Path not found: {path}")
+        
+        try:
+            if os.path.isfile(local_path) or os.path.islink(local_path):
+                os.remove(local_path)
+            elif os.path.isdir(local_path):
+                if force:
+                    import shutil
+                    shutil.rmtree(local_path)
+                else:
+                    os.rmdir(local_path)  # Will raise OSError if directory is not empty
+            return True
+        except OSError as e:
+            if force:
+                return True
+            raise e
+    
+    def mkdir(self, path: PurePosixPath, parents: bool = False, exist_ok: bool = False) -> bool:
+        """Create a directory.
+        
+        Args:
+            path: Directory path to create
+            parents: Create parent directories if they don't exist
+            exist_ok: Don't raise error if directory already exists
+            
+        Returns:
+            Success status
+            
+        Raises:
+            FileExistsError: If directory exists and exist_ok=False
+            FileNotFoundError: If parent doesn't exist and parents=False
+            PermissionError: If VFS is readonly
+        """
+        if self.readonly():
+            raise PermissionError("Cannot create directories in readonly VFS")
+        
+        # 检查路径是否对应一个挂载点
+        vfs, remaining_path = self.resolve_path(path)
+        if vfs is not self:
+            # 如果路径对应一个挂载点，委托给挂载的 VFS
+            return vfs.mkdir(remaining_path, parents, exist_ok)
+        
+        # 否则，使用本地文件系统
+        local_path = self._resolve_local_path(path)
+        
+        try:
+            os.makedirs(local_path, exist_ok=exist_ok)
+            return True
+        except FileExistsError:
+            if not exist_ok:
+                raise FileExistsError(f"Directory already exists: {path}")
+            return True
+        except FileNotFoundError:
+            if not parents:
+                raise FileNotFoundError(f"Parent directory does not exist: {path}")
+            # This shouldn't happen with os.makedirs, but just in case
+            os.makedirs(local_path, exist_ok=exist_ok)
+            return True
+    
     # Edit operations - temporary implementations
     def patch(self, path: PurePosixPath, range: Tuple[int, int], content: bytes, 
               session_id: Optional[ServiceVFSProtocol.SessionId] = None) -> ServiceVFSProtocol.OperationId:

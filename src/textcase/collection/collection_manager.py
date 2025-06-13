@@ -235,6 +235,14 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         if name in self._collections_cache:
             del self._collections_cache[name]
         
+        # Remove the actual collection directory and files
+        collection_path = PurePosixPath(self._hierarchy[name]['path'])
+        try:
+            self._vfs.remove(collection_path, force=True, recursive=True)
+        except VFSClientException:
+            # Continue even if physical removal fails
+            pass
+        
         # Update root/default collection if necessary
         if self._root_collection_name == name:
             # Find a new root collection (one without parent)

@@ -239,10 +239,9 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         # Delete tag file
         tag_file_path = self._path / f"{tag}.txt"
         try:
-            # Note: VFS doesn't have delete method in the interface
-            # We'll need to handle this when VFS supports file deletion
-            pass  # TODO: Implement file deletion when VFS supports it
-        except Exception:
+            self._vfs.remove(tag_file_path, force=True)
+        except VFSClientException:
+            # File might not exist, which is fine
             pass
         
         return True
@@ -324,6 +323,35 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         
         return results
     
+    def clear(self) -> None:
+        """Remove all items and sub-collections from this collection."""
+        # Remove all items first
+        for item_name in self.list_items():
+            item = self.get_item(item_name)
+            if item:
+                item.delete()
+        
+        # Remove all sub-collections
+        for sub_collection in self.iter_collections():
+            sub_collection.clear()  # Recursively clear sub-collections
+            # Remove the sub-collection directory
+            try:
+                self._vfs.remove(sub_collection.path, force=True, recursive=True)
+            except VFSClientException:
+                pass  # Continue even if removal fails
+        
+        # Remove all tag files
+        for tag in self.list_tags():
+            tag_file_path = self._path / f"{tag}.tag"
+            try:
+                self._vfs.remove(tag_file_path, force=True)
+            except VFSClientException:
+                pass  # Continue even if removal fails
+        
+        # Clear caches
+        self._items_cache.clear()
+        self._collections_cache.clear()
+    
     def get_next_item_name(self, prefix: Optional[str] = None) -> str:
         """Generate the next available item name.
         
@@ -353,13 +381,15 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         try:
             info = self._vfs.info(self._path)
             if not info:
-                # Directory doesn't exist, we need to create it
-                # Note: VFS interface doesn't show directory creation method
-                # We'll assume it's handled by putting a file in the directory
-                pass
+                # Directory doesn't exist, create it
+                self._vfs.mkdir(self._path, parents=True, exist_ok=True)
         except VFSClientException:
-            # Directory doesn't exist
-            pass
+            # Directory doesn't exist, create it
+            try:
+                self._vfs.mkdir(self._path, parents=True, exist_ok=True)
+            except VFSClientException:
+                # If mkdir fails, we'll let the error propagate
+                pass
     
     def _load_config(self) -> None:
         """Load collection configuration from .textcase.yml."""
