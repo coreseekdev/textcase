@@ -29,19 +29,25 @@ class ServiceRegistryImpl(ServiceRegistry):
     
     _instance = None
     
-    def __new__(cls, config_file: Path = None):
+    def __new__(cls, config: Optional[Union[Path, ConfigService]] = None):
         if cls._instance is None:
             cls._instance = super(ServiceRegistry, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
     
-    def __init__(self, config_file: Path):
+    def __init__(self, config: Optional[Union[Path, ConfigService]] = None):
         if hasattr(self, '_initialized') and self._initialized:
             return
             
         self._services: Dict[str, ServiceInfo] = {}
-        # 初始化 config_service, conf service 是系统运行所必须的
-        self._config_service = ConfigService(config_file)
+        # 初始化 config_service
+        if isinstance(config, ConfigService):
+            self._config_service = config
+        elif config is not None:
+            self._config_service = ConfigService(config)
+        else:
+            self._config_service = ConfigService(None)
+            
         self._initialized = True
 
         # Ensure cleanup on program exit
@@ -148,10 +154,13 @@ class ServiceRegistryImpl(ServiceRegistry):
         return self._config_service
 
 # For backward compatibility, provide a factory function
-def create_service_registry(config_file: Path) -> ServiceRegistry:
+def create_service_registry(config: Optional[Union[Path, ConfigService]] = None) -> ServiceRegistry:
     """Create a new ServiceRegistry instance.
+    
+    Args:
+        config: Either a Path to config file or an existing ConfigService instance
     
     Returns:
         ServiceRegistry implementation instance
     """
-    return ServiceRegistryImpl(config_file)
+    return ServiceRegistryImpl(config)

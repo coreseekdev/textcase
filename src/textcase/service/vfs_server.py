@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 
 from ..core.vfs.repo_vfs import RepoVFS
 from ..proto.service_vfs_protocol import ServiceVFSProtocol, EntryType
-
+from ..proto.service_registry_protocol import ServiceRegistry
 
 class VFSServerException(Exception):
     """Custom exception for VFS server errors.
@@ -52,12 +52,14 @@ class VFSServer:
     interfaces while preserving exception information for client reconstruction.
     """
     
-    def __init__(self, repo_path: str):
+    def __init__(self, service_name: str, repo_path: str):
+
         """Initialize VFS server.
         
         Args:
             repo_path: Path to the repository
         """
+        self._name = service_name
         self.repo_path = repo_path
         self._vfs = RepoVFS(repo_path)
     
@@ -106,10 +108,8 @@ class VFSServer:
         Returns:
             Service name
         """
-        try:
-            return self._vfs.name()
-        except Exception as e:
-            raise self._handle_exception(e)
+        return self._name
+
     
     def readonly(self) -> bool:
         """Check if the VFS is read-only.
@@ -284,3 +284,18 @@ class VFSServer:
             return self._vfs.list_sessions()
         except Exception as e:
             raise self._handle_exception(e)
+
+def create_vfs_service(service_name:str, service_registry: ServiceRegistry) -> VFSServer:
+    """Create a VFS service instance.
+    
+    Args:
+        repo_path: Path to the repository
+        **kwargs: Additional service configuration
+        
+    Returns:
+        VFS service instance
+    """
+    repo_path = service_registry.config_service.get("vfs.repo_path", None)
+    if repo_path is None:
+        raise ValueError("VFS repo_path not set in config service")
+    return VFSServer(service_name, repo_path)

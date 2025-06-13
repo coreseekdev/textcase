@@ -30,11 +30,11 @@ class VFSConfig:
         self._load_defaults()
     
     @property
-    def defaults(self) -> str:
-        """Get default VFS root path.
+    def defaults(self) -> Dict[str, Any]:
+        """Get default VFS configuration values.
         
         Returns:
-            Default VFS root path
+            Default VFS configuration dictionary
         """
         defaults = {
             'vfs.root_path': '.',
@@ -46,7 +46,7 @@ class VFSConfig:
     def _load_defaults(self) -> None:
         """Load default VFS configuration values."""
         for key, value in self.defaults.items():
-            self.config.set_temporary (key, value, override==False)
+            self.config.set_temporary(key, value, override=False)
     
     def load_from_env(self, prefix: str = "TCE_VFS_") -> None:
         """Load VFS configuration from environment variables.

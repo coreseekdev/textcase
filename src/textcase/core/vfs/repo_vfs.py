@@ -10,7 +10,7 @@ import os
 
 from .local_vfs import LocalVFS
 from .git_vfs import GitVFS
-from ...proto.service_vfs_protocol import ServiceVFSProtocol
+from ...proto.service_vfs_protocol import ServiceVFSProtocol, EntryType
 
 
 class RepoVFS(ServiceVFSProtocol):
@@ -107,7 +107,7 @@ class RepoVFS(ServiceVFSProtocol):
         """
         return self._local_vfs.info(path)
     
-    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PosixPath, EntryType]]:
+    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PurePosixPath, EntryType]]:
         """List contents of a directory.
         
         Args:

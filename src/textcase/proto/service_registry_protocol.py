@@ -60,7 +60,7 @@ class ServiceRegistry(Protocol):
         ...
     
     @property
-    def config_service(self):
+    def config_service(self) -> ServiceConfigProtocol:
         """Get the configuration service instance.
         
         Returns:
