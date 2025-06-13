@@ -74,7 +74,10 @@ class LocalVFS(ServiceVFSProtocol):
             mount_parts_count = len(PurePosixPath(best_mount).parts)
             remaining_parts = path_parts[mount_parts_count:]
             remaining_path = PurePosixPath(*remaining_parts) if remaining_parts else PurePosixPath('.')
-            return vfs, remaining_path
+            # 如果后续没有文件挂载，返回  vfs, remaining_path
+            # 如果有其他文件挂载，进一步解析（递归）
+            return vfs.resolve_path(remaining_path)
+            # return vfs, remaining_path
         
         # No mount point found, use this VFS
         return self, path

@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 import json
 
 from textcase.core.vfs.repo_vfs import RepoVFS
+from textcase.client.vfs_client import VFSClient
 from textcase.proto.service_vfs_protocol import EntryType
 
 
@@ -32,21 +33,34 @@ def cmd_ls(vfs, args):
         vfs: VFS instance
         args: Command line arguments
     """
-    path = PurePosixPath(args.path)
+    path = args.path
     options = {}
     
     try:
         # Call the list method with the provided path
-        entries = vfs.list(path, options)
+        if isinstance(vfs, VFSClient):
+            # VFS client returns list of (path, entry_type) as strings
+            entries = vfs.list(path, options)
+        else:
+            # RepoVFS returns list of (PurePosixPath, EntryType)
+            entries = vfs.list(PurePosixPath(path), options)
         
         # Print the directory contents
         print(f"Contents of {args.path}:")
         for entry_path, entry_type in entries:
-            # Format the output based on entry type
-            if entry_type == EntryType.DIR:
-                print(f"[DIR]  {entry_path}")
+            # Handle different return types
+            if isinstance(vfs, VFSClient):
+                # VFS client returns strings
+                if entry_type == "dir":
+                    print(f"[DIR]  {entry_path}")
+                else:
+                    print(f"[FILE] {entry_path}")
             else:
-                print(f"[FILE] {entry_path}")
+                # RepoVFS returns EntryType enum
+                if entry_type == EntryType.DIR:
+                    print(f"[DIR]  {entry_path}")
+                else:
+                    print(f"[FILE] {entry_path}")
     except Exception as e:
         print(f"Error listing directory: {e}")
         return 1
@@ -61,11 +75,15 @@ def cmd_get(vfs, args):
         vfs: VFS instance
         args: Command line arguments
     """
-    path = PurePosixPath(args.path)
-    
     try:
         # Get file contents as text
-        content = vfs.get_text(path)
+        if isinstance(vfs, VFSClient):
+            # VFS client expects string path
+            content = vfs.get_text(args.path)
+        else:
+            # RepoVFS expects PurePosixPath
+            content = vfs.get_text(PurePosixPath(args.path))
+            
         if content is not None:
             print(content)
         else:
@@ -85,12 +103,17 @@ def cmd_put(vfs, args):
         vfs: VFS instance
         args: Command line arguments
     """
-    path = PurePosixPath(args.path)
     content = args.content.encode('utf-8')  # Convert string to bytes
     
     try:
         # Write content to the file
-        success = vfs.put(path, content, create_if_missing=True)
+        if isinstance(vfs, VFSClient):
+            # VFS client expects string path
+            success = vfs.put(args.path, content, create_if_missing=True)
+        else:
+            # RepoVFS expects PurePosixPath
+            success = vfs.put(PurePosixPath(args.path), content, create_if_missing=True)
+            
         if success:
             print(f"Successfully wrote to {args.path}")
         else:
@@ -108,6 +131,7 @@ def main():
     # Create the top-level parser
     parser = argparse.ArgumentParser(description="VFS CLI tool for interacting with repository file systems")
     parser.add_argument('repo_path', help="Path to the git repository")
+    parser.add_argument('--server', help="Use VFS server instead of direct access (endpoint)")
     
     # Create subparsers for commands
     subparsers = parser.add_subparsers(dest='command', help="Command to execute")
@@ -135,7 +159,12 @@ def main():
     
     # Initialize VFS
     try:
-        vfs = RepoVFS(args.repo_path)
+        if args.server:
+            # Use VFS client to connect to server
+            vfs = VFSClient(args.server)
+        else:
+            # Use direct RepoVFS access
+            vfs = RepoVFS(args.repo_path)
     except Exception as e:
         print(f"Error initializing VFS: {e}")
         return 1

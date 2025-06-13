@@ -9,7 +9,7 @@ import zerorpc
 from zerorpc import gevent_zmq
 
 from .services import DefaultService, get_service_factory
-from .config import ConfigService
+from ..core.config import ConfigService
 from ..proto.service_registry_protocol import ServiceRegistry
 
 # 确保 monkey patch

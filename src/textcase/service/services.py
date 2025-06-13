@@ -1,6 +1,6 @@
 from typing import Any, Dict, Callable, Optional, TYPE_CHECKING
 from .vfs_service import VFSService
-from .config import ConfigService
+from ..core.config import ConfigService
 
 if TYPE_CHECKING:
     from .service_registry import ServiceRegistry
