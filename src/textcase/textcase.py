@@ -15,6 +15,8 @@ from .core.config.config_service import ConfigService
 from .core.config.config_vfs import setup_vfs_config
 from .service.service_registry_impl import create_service_registry
 from .scm.git import find_git_repo_root
+from .client.vfs_client import VFSClient, VFSClientException
+
 
 
 class TextCaseFactory:
@@ -122,15 +124,17 @@ class TextCase:
         
         # VFS service will be initialized when needed
         self._vfs_endpoint = None
+        self._vfs_client = None
         
     def start_services(self) -> None:
         """Start all services."""
         self._vfs_endpoint = self.service_registry.get_service('vfs')
         
     def stop_services(self) -> None:
-        """Stop all services."""
+        """Stop all services."""    
         self.service_registry.stop_service('vfs')
         self._vfs_endpoint = None
+        self._vfs_client = None
         
     def get_vfs_endpoint(self) -> str:
         """Get VFS service endpoint.
@@ -143,19 +147,16 @@ class TextCase:
         return self._vfs_endpoint
         
     @property
-    def vfs(self):
+    def vfs(self) -> VFSClient:
         """Get VFS client for interacting with VFS service.
         
         Returns:
             VFS client instance
         """
-        # Import here to avoid circular imports
-        import zerorpc
-        
-        endpoint = self.get_vfs_endpoint()
-        client = zerorpc.Client()
-        client.connect(endpoint)
-        return client
+        if self._vfs_client is None:
+            endpoint = self.get_vfs_endpoint()
+            self._vfs_client = VFSClient(endpoint)
+        return self._vfs_client
         
     def get_config_value(self, key: str, default: Any = None) -> Any:
         """Get configuration value.

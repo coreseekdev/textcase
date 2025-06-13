@@ -37,7 +37,7 @@ def cmd_ls(vfs, args):
     options = {}
     
     try:
-        # VFSClient accepts string paths and returns (PosixPath, EntryType) tuples
+        # VFSClient accepts string paths and returns (PurePosixPath, EntryType) tuples
         # RepoVFS needs PurePosixPath and returns (PurePosixPath, EntryType) tuples
         entries = vfs.list(PurePosixPath(path), options)
         

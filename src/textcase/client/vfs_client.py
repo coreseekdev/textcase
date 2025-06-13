@@ -8,8 +8,7 @@ like resolve_path, mount, unmount, mounts and session management.
 import threading
 import zerorpc
 from typing import Optional, Any, Dict, List, Tuple, Union
-from pathlib import PurePosixPath, PosixPath
-from ..core.service_registry import service_registry
+from pathlib import PurePosixPath
 from ..proto.service_vfs_protocol import EntryType
 
 
@@ -70,10 +69,11 @@ class VFSClient:
     def _connect(self, endpoint: str):
         """Connect to the VFS RPC server."""
         # Get or create the VFS service
-        self.endpoint = service_registry.get_service(
-            "vfs",
-            endpoint=endpoint,
-        )
+        # self.endpoint = service_registry.get_service(
+        #    "vfs",
+        #    endpoint=endpoint,
+        #)
+        self.endpoint = endpoint
         self.client = zerorpc.Client(connect_to=self.endpoint)
     
     def _handle_rpc_exception(self, func, *args, **kwargs):
@@ -132,7 +132,7 @@ class VFSClient:
         path_str = str(path) if isinstance(path, PurePosixPath) else path
         return self._handle_rpc_exception(self.client.info, path_str)
     
-    def list(self, path: Union[str, PurePosixPath], option: Optional[Dict[str, Any]] = None) -> List[Tuple[PosixPath, EntryType]]:
+    def list(self, path: Union[str, PurePosixPath], option: Optional[Dict[str, Any]] = None) -> List[Tuple[PurePosixPath, EntryType]]:
         """List contents of a directory.
         
         Args:
@@ -140,7 +140,7 @@ class VFSClient:
             option: Optional listing options
             
         Returns:
-            List of (PosixPath, EntryType) tuples
+            List of (PurePosixPath, EntryType) tuples
         """
         if option is None:
             option = {}
@@ -149,10 +149,10 @@ class VFSClient:
         # Get string tuples from server and convert to proper types
         result = self._handle_rpc_exception(self.client.list, path_str, option)
         
-        # Convert string tuples to (PosixPath, EntryType) tuples
+        # Convert string tuples to (PurePosixPath, EntryType) tuples
         converted_result = []
         for path_str, entry_type_str in result:
-            posix_path = PosixPath(path_str)
+            posix_path = PurePosixPath(path_str)
             entry_type = EntryType(entry_type_str)
             converted_result.append((posix_path, entry_type))
         

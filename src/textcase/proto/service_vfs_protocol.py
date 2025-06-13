@@ -5,7 +5,7 @@ This module defines the protocol interface for VFS services.
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Any, Protocol, BinaryIO, Tuple
-from pathlib import PosixPath, PurePosixPath
+from pathlib import PurePosixPath
 from enum import Enum
 
 class EntryType(Enum):
@@ -101,7 +101,7 @@ class ServiceVFSProtocol(ABC):
         ...
     
     @abstractmethod
-    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PosixPath, EntryType]]:
+    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PurePosixPath, EntryType]]:
         """List contents of a directory.
         
         Args:

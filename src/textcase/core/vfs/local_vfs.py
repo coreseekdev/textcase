@@ -4,7 +4,7 @@ This module provides a local file system implementation of the VFS service proto
 """
 
 from abc import ABC, abstractmethod
-from pathlib import Path, PurePosixPath, PosixPath
+from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Tuple, Any
 import os
 import uuid
@@ -188,7 +188,7 @@ class LocalVFS(ServiceVFSProtocol):
             'exists': True
         }
     
-    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PosixPath, EntryType]]:
+    def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PurePosixPath, EntryType]]:
         """List contents of a directory.
         
         Args:
