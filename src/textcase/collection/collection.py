@@ -11,6 +11,7 @@ from ..client.vfs_client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection, ResourceItem
 from .config import CollectionConfig
 from .item import ResourceItemImpl
+from .collection_tag import CollectionTagManager, TagManager
 
 T = TypeVar('T')
 
@@ -21,8 +22,11 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
     This implementation stores collections as directories with:
     - .textcase.yml for collection metadata
     - Individual files for each item
-    - Tag files (*.txt) containing item names for each tag
+    - Tag files (*.list) containing item names for each tag
     """
+    
+    # File extension for tag files - now managed by TagManager
+    TAG_FILE_EXTENSION: str = '.list'
     
     def __init__(
         self,
@@ -45,6 +49,8 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         self._parent = parent
         self._config: Optional[CollectionConfig] = None
         self._items_cache: Dict[str, ResourceItemImpl[T]] = {}
+        self._collections_cache: Dict[str, 'ResourceCollectionImpl[T]'] = {}
+        self._tag_manager: Optional[CollectionTagManager] = None
         
         # Ensure directory exists and load configuration
         self._ensure_directory_exists()
@@ -72,6 +78,16 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             self._load_config()
         return self._config
     
+    @property
+    def tag_manager(self) -> CollectionTagManager:
+        """Get the tag manager for this collection.
+        
+        The tag manager is loaded on demand and cached for future use.
+        """
+        if self._tag_manager is None:
+            self._tag_manager = CollectionTagManager(self, self._vfs)
+        return self._tag_manager
+    
     def add_item(self, name: str, data: Optional[T] = None) -> ResourceItem[T]:
         """Add a new item to this collection.
         
@@ -88,7 +104,7 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         if self.has_item(name):
             raise ValueError(f"Item '{name}' already exists in collection '{self._name}'")
         
-        item = ResourceItemImpl[T](name, self._path, self.config, self._vfs, data)
+        item = ResourceItemImpl[T](name, self, data)
         self._items_cache[name] = item
         
         # Create the item file if it doesn't exist
@@ -110,7 +126,7 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             return self._items_cache[name]
         
         # Check if item file exists
-        item = ResourceItemImpl[T](name, self._path, self.config, self._vfs)
+        item = ResourceItemImpl[T](name, self)
         if item.exists():
             self._items_cache[name] = item
             return item
@@ -191,28 +207,14 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             if item:
                 yield item
     
-    def add_tag(self, tag: str, description: str = "") -> None:
-        """Add a new tag to this collection.
+    def add_tag(self, tag: str, description: Optional[str] = None) -> None:
+        """Add a tag to this collection.
         
         Args:
             tag: The tag name
             description: Optional description for the tag
         """
-        # Update config
-        config = self.config
-        config.tags[tag] = description
-        config.save(self._vfs)
-        
-        # Create empty tag file
-        tag_file_path = self._path / f"{tag}.txt"
-        try:
-            # Only create if it doesn't exist
-            info = self._vfs.info(tag_file_path)
-            if not info:
-                self._vfs.put(tag_file_path, b'', create_if_missing=True)
-        except VFSClientException:
-            # File doesn't exist, create it
-            self._vfs.put(tag_file_path, b'', create_if_missing=True)
+        self.tag_manager.add_tag(tag, description)
     
     def remove_tag(self, tag: str) -> bool:
         """Remove a tag from this collection.
@@ -223,28 +225,7 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         Returns:
             True if the tag was removed, False if it didn't exist
         """
-        config = self.config
-        if tag not in config.tags:
-            return False
-        
-        # Remove from all items first
-        for item in self.iter_items():
-            if item.has_tag(tag):
-                item.remove_tag(tag)
-        
-        # Remove from config
-        del config.tags[tag]
-        config.save(self._vfs)
-        
-        # Delete tag file
-        tag_file_path = self._path / f"{tag}.txt"
-        try:
-            self._vfs.remove(tag_file_path, force=True)
-        except VFSClientException:
-            # File might not exist, which is fine
-            pass
-        
-        return True
+        return self.tag_manager.remove_tag(tag)
     
     def has_tag(self, tag: str) -> bool:
         """Check if a tag exists in this collection.
@@ -255,7 +236,7 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         Returns:
             True if the tag exists, False otherwise
         """
-        return tag in self.config.tags
+        return self.tag_manager.has_tag(tag)
     
     def list_tags(self) -> List[str]:
         """List all tags in this collection.
@@ -263,8 +244,17 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         Returns:
             A list of tag names
         """
-        return list(self.config.tags.keys())
+        return self.tag_manager.list_tags()
     
+    @property
+    def tags(self) -> Dict[str, Set[str]]:
+        """Get all tags and their associated item names.
+        
+        Returns:
+            Dictionary mapping tag names to sets of item names
+        """
+        return self.tag_manager.get_all_tags()
+        
     def get_items_by_tag(self, tag: str) -> List[ResourceItem[T]]:
         """Get all items that have a specific tag.
         
@@ -277,24 +267,17 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         if not self.has_tag(tag):
             return []
         
-        tag_file_path = self._path / f"{tag}.txt"
-        try:
-            content = self._vfs.get_text(tag_file_path, encoding='utf-8')
-            if not content:
-                return []
-            
-            item_names = [line.strip() for line in content.splitlines() if line.strip()]
-            items = []
-            
-            for name in item_names:
-                item = self.get_item(name)
-                if item:
-                    items.append(item)
-            
-            return items
-            
-        except VFSClientException:
-            return []
+        # Get item names from tag manager
+        item_names = self.tag_manager.get_items_by_tag(tag)
+        items = []
+        
+        # Convert item names to ResourceItem instances
+        for name in item_names:
+            item = self.get_item(name)
+            if item:
+                items.append(item)
+        
+        return items
     
     def search_items(self, query: str, tags: Optional[Set[str]] = None) -> List[ResourceItem[T]]:
         """Search for items by name pattern and optional tags.
@@ -323,6 +306,44 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         
         return results
     
+    def get_items_by_tags(self, tags: Set[str], match_all: bool = True) -> List[ResourceItem[T]]:
+        """Get items that match tag criteria.
+        
+        Args:
+            tags: Set of tag names to search for
+            match_all: If True, items must have all tags; if False, any tag
+            
+        Returns:
+            List of items matching the tag criteria
+        """
+        if not tags:
+            return []
+        
+        # Get all items with their tags
+        all_items = list(self.iter_items())
+        results = []
+        
+        for item in all_items:
+            item_tags = item.tags
+            if match_all:
+                # Item must have all specified tags
+                if tags.issubset(item_tags):
+                    results.append(item)
+            else:
+                # Item must have at least one of the specified tags
+                if tags.intersection(item_tags):
+                    results.append(item)
+        
+        return results
+    
+    def get_available_tags(self) -> Set[str]:
+        """Get all tags used in this collection.
+        
+        Returns:
+            Set of all tag names used by items in this collection
+        """
+        return set(self.tag_manager.list_tags())
+    
     def clear(self) -> None:
         """Remove all items and sub-collections from this collection."""
         # Remove all items first
@@ -340,17 +361,14 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             except VFSClientException:
                 pass  # Continue even if removal fails
         
-        # Remove all tag files
-        for tag in self.list_tags():
-            tag_file_path = self._path / f"{tag}.tag"
-            try:
-                self._vfs.remove(tag_file_path, force=True)
-            except VFSClientException:
-                pass  # Continue even if removal fails
+        # Clear all tags
+        if self._tag_manager is not None:
+            self._tag_manager.clear_tags()
         
         # Clear caches
         self._items_cache.clear()
         self._collections_cache.clear()
+        self._tag_manager = None  # Reset tag manager
     
     def get_next_item_name(self, prefix: Optional[str] = None) -> str:
         """Generate the next available item name.
@@ -399,3 +417,131 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         if self._config.name != self._name:
             self._config.name = self._name
             self._config.save(self._vfs)
+    
+    def item_exists(self, name: str) -> bool:
+        """Check if an item file exists.
+        
+        Args:
+            name: The name of the item
+            
+        Returns:
+            True if the item file exists, False otherwise
+        """
+        file_path = self._get_item_file_path(name)
+        try:
+            info = self._vfs.info(file_path)
+            return info is not None
+        except VFSClientException:
+            return False
+    
+    def create_item_file(self, name: str, content: str = "") -> None:
+        """Create an item file.
+        
+        Args:
+            name: The name of the item
+            content: Initial content for the file
+            
+        Raises:
+            VFSClientException: If the file cannot be created
+        """
+        file_path = self._get_item_file_path(name)
+        try:
+            self._vfs.put(file_path, content.encode('utf-8'), create_if_missing=True)
+        except Exception as e:
+            raise VFSClientException(
+                'ItemCreateError',
+                f'Failed to create item file {file_path}: {e}'
+            )
+    
+    def read_item_file(self, name: str) -> str:
+        """Read the content of an item file.
+        
+        Args:
+            name: The name of the item
+            
+        Returns:
+            The file content as string
+            
+        Raises:
+            VFSClientException: If the file cannot be read
+        """
+        file_path = self._get_item_file_path(name)
+        try:
+            return self._vfs.get_text(file_path, encoding='utf-8')
+        except Exception as e:
+            raise VFSClientException(
+                'ItemReadError',
+                f'Failed to read item file {file_path}: {e}'
+            )
+    
+    def write_item_file(self, name: str, content: str) -> None:
+        """Write content to an item file.
+        
+        Args:
+            name: The name of the item
+            content: The content to write
+            
+        Raises:
+            VFSClientException: If the file cannot be written
+        """
+        file_path = self._get_item_file_path(name)
+        try:
+            self._vfs.put(file_path, content.encode('utf-8'), create_if_missing=True)
+        except Exception as e:
+            raise VFSClientException(
+                'ItemWriteError',
+                f'Failed to write item file {file_path}: {e}'
+            )
+    
+    def delete_item_file(self, name: str) -> None:
+        """Delete an item file.
+        
+        Args:
+            name: The name of the item
+            
+        Raises:
+            VFSClientException: If the file cannot be deleted
+        """
+        file_path = self._get_item_file_path(name)
+        try:
+            # Check if file exists before attempting to delete
+            if self.item_exists(name):
+                self._vfs.remove(file_path, force=True)
+        except VFSClientException as e:
+            raise VFSClientException(
+                'ItemDeleteError',
+                f'Failed to delete item file {file_path}: {e}'
+            )
+    
+    def _get_item_file_path(self, name: str) -> PurePosixPath:
+        """Get the file path for an item.
+        
+        Args:
+            name: The name of the item
+            
+        Returns:
+            The full path to the item's file
+        """
+        filename = self.config.get_item_filename(name)
+        return self._path / filename
+    
+    def get_item_tags(self, name: str) -> Set[str]:
+        """Get all tags for an item.
+        
+        Args:
+            name: The name of the item
+            
+        Returns:
+            A set of tags associated with the item
+        """
+        return self.tag_manager.get_item_tags(name)
+    
+    def update_item_tag(self, name: str, tag: str, add: bool) -> None:
+        """Update a tag file to add or remove an item.
+        
+        Args:
+            name: The name of the item
+            tag: The tag name
+            add: True to add the item, False to remove it
+        """
+        self.tag_manager.update_item_tag(name, tag, add)

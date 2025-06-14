@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 from typing import Any, Dict, Generic, Optional, Set, TypeVar, Union
 
 from ..client.vfs_client import VFSClient, VFSClientException
-from ..proto.resource_collection_protocol import ResourceItem
+from ..proto.resource_collection_protocol import ResourceItem, ResourceCollection
 from .config import CollectionConfig
 
 T = TypeVar('T')
@@ -21,27 +21,24 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
     following the naming conventions defined in the collection configuration.
     """
     
+    # File extension for tag files
+    TAG_FILE_EXTENSION: str = '.list'
+    
     def __init__(
         self,
         name: str,
-        collection_path: Union[PurePosixPath, str],
-        config: CollectionConfig,
-        vfs: VFSClient,
+        collection: 'ResourceCollection[T]',
         data: Optional[T] = None
     ):
         """Initialize a resource item.
         
         Args:
             name: The unique name of the item within the collection
-            collection_path: Path to the collection directory
-            config: Collection configuration
-            vfs: VFS client for file operations
+            collection: The parent collection this item belongs to
             data: Optional data payload for the item
         """
         self._name = name
-        self._collection_path = PurePosixPath(collection_path) if isinstance(collection_path, str) else collection_path
-        self._config = config
-        self._vfs = vfs
+        self._collection = collection
         self._data = data
         self._tags: Set[str] = set()
         self._metadata: Dict[str, Any] = {}
@@ -127,8 +124,11 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Returns:
             The full path to the item's file
         """
-        filename = self._config.get_item_filename(self._name)
-        return self._collection_path / filename
+        # Get the collection path and config from the parent collection
+        collection_path = self._collection.path
+        config = self._collection.config
+        filename = config.get_item_filename(self._name)
+        return collection_path / filename
     
     def exists(self) -> bool:
         """Check if the item file exists.
@@ -136,11 +136,8 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Returns:
             True if the item file exists, False otherwise
         """
-        try:
-            info = self._vfs.info(self.get_file_path())
-            return info is not None
-        except VFSClientException:
-            return False
+        # Delegate to the collection to check if the file exists
+        return self._collection.item_exists(self._name)
     
     def create(self, content: str = "") -> None:
         """Create the item file.
@@ -151,14 +148,8 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Raises:
             VFSClientException: If the file cannot be created
         """
-        file_path = self.get_file_path()
-        try:
-            self._vfs.put(file_path, content.encode('utf-8'), create_if_missing=True)
-        except Exception as e:
-            raise VFSClientException(
-                'ItemCreateError',
-                f'Failed to create item file {file_path}: {e}'
-            )
+        # Delegate to the collection to create the item file
+        self._collection.create_item_file(self._name, content)
     
     def read_content(self) -> str:
         """Read the content of the item file.
@@ -169,14 +160,8 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Raises:
             VFSClientException: If the file cannot be read
         """
-        file_path = self.get_file_path()
-        try:
-            return self._vfs.get_text(file_path, encoding='utf-8')
-        except Exception as e:
-            raise VFSClientException(
-                'ItemReadError',
-                f'Failed to read item file {file_path}: {e}'
-            )
+        # Delegate to the collection to read the item file
+        return self._collection.read_item_file(self._name)
     
     def write_content(self, content: str) -> None:
         """Write content to the item file.
@@ -187,14 +172,8 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Raises:
             VFSClientException: If the file cannot be written
         """
-        file_path = self.get_file_path()
-        try:
-            self._vfs.put(file_path, content.encode('utf-8'), create_if_missing=True)
-        except Exception as e:
-            raise VFSClientException(
-                'ItemWriteError',
-                f'Failed to write item file {file_path}: {e}'
-            )
+        # Delegate to the collection to write the item file
+        self._collection.write_item_file(self._name, content)
     
     def delete(self) -> None:
         """Delete the item file and remove from all tag files.
@@ -206,66 +185,32 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         for tag in self._tags.copy():
             self.remove_tag(tag)
         
-        # Delete the item file
-        file_path = self.get_file_path()
-        try:
-            # Check if file exists before attempting to delete
-            if self.exists():
-                self._vfs.remove(file_path, force=True)
-        except VFSClientException as e:
-            raise VFSClientException(
-                'ItemDeleteError',
-                f'Failed to delete item file {file_path}: {e}'
-            )
+        # Delegate to the collection to delete the item file
+        self._collection.delete_item_file(self._name)
     
     def _load_item_info(self) -> None:
         """Load item tags and metadata from tag files."""
-        # Load tags by checking which tag files contain this item
-        for tag_name in self._config.tags.keys():
-            tag_file_path = self._collection_path / f"{tag_name}.txt"
-            try:
-                content = self._vfs.get_text(tag_file_path, encoding='utf-8')
-                if content:
-                    lines = [line.strip() for line in content.splitlines()]
-                    if self._name in lines:
-                        self._tags.add(tag_name)
-            except VFSClientException:
-                # Tag file doesn't exist, skip
-                continue
+        # Delegate to the collection to load item tags
+        self._tags = self._collection.get_item_tags(self._name)
     
-    def _update_tag_file(self, tag: str, add: bool) -> None:
-        """Update a tag file to add or remove this item.
+    def add_tag(self, tag: str) -> None:
+        """Add a tag to this item.
         
         Args:
-            tag: The tag name
-            add: True to add the item, False to remove it
+            tag: The tag to add
         """
-        tag_file_path = self._collection_path / f"{tag}.txt"
+        if tag not in self._tags:
+            self._tags.add(tag)
+            # Delegate to the collection to update the tag file
+            self._collection.update_item_tag(self._name, tag, add=True)
+    
+    def remove_tag(self, tag: str) -> None:
+        """Remove a tag from this item.
         
-        try:
-            # Read existing content
-            try:
-                content = self._vfs.get_text(tag_file_path, encoding='utf-8')
-                lines = [line.strip() for line in content.splitlines() if line.strip()]
-            except VFSClientException:
-                # File doesn't exist
-                lines = []
-            
-            # Update the lines
-            if add:
-                if self._name not in lines:
-                    lines.append(self._name)
-                    lines.sort()  # Keep sorted for consistency
-            else:
-                if self._name in lines:
-                    lines.remove(self._name)
-            
-            # Write back to file
-            new_content = '\n'.join(lines) + ('\n' if lines else '')
-            self._vfs.put(tag_file_path, new_content.encode('utf-8'), create_if_missing=True)
-            
-        except Exception as e:
-            raise VFSClientException(
-                'TagUpdateError',
-                f'Failed to update tag file {tag_file_path}: {e}'
-            )
+        Args:
+            tag: The tag to remove
+        """
+        if tag in self._tags:
+            self._tags.remove(tag)
+            # Delegate to the collection to update the tag file
+            self._collection.update_item_tag(self._name, tag, add=False)
