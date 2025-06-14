@@ -185,32 +185,66 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         for tag in self._tags.copy():
             self.remove_tag(tag)
         
-        # Delegate to the collection to delete the item file
-        self._collection.delete_item_file(self._name)
+        # Delete the item file
+        file_path = self.get_file_path()
+        try:
+            # Check if file exists before attempting to delete
+            if self.exists():
+                self._vfs.remove(file_path, force=True)
+        except VFSClientException as e:
+            raise VFSClientException(
+                'ItemDeleteError',
+                f'Failed to delete item file {file_path}: {e}'
+            )
     
     def _load_item_info(self) -> None:
         """Load item tags and metadata from tag files."""
-        # Delegate to the collection to load item tags
-        self._tags = self._collection.get_item_tags(self._name)
+        # Load tags by checking which tag files contain this item
+        for tag_name in self._config.tags.keys():
+            tag_file_path = self._collection_path / f"{tag_name}.txt"
+            try:
+                content = self._vfs.get_text(tag_file_path, encoding='utf-8')
+                if content:
+                    lines = [line.strip() for line in content.splitlines()]
+                    if self._name in lines:
+                        self._tags.add(tag_name)
+            except VFSClientException:
+                # Tag file doesn't exist, skip
+                continue
     
-    def add_tag(self, tag: str) -> None:
-        """Add a tag to this item.
+    def _update_tag_file(self, tag: str, add: bool) -> None:
+        """Update a tag file to add or remove this item.
         
         Args:
-            tag: The tag to add
+            tag: The tag name
+            add: True to add the item, False to remove it
         """
-        if tag not in self._tags:
-            self._tags.add(tag)
-            # Delegate to the collection to update the tag file
-            self._collection.update_item_tag(self._name, tag, add=True)
-    
-    def remove_tag(self, tag: str) -> None:
-        """Remove a tag from this item.
+        tag_file_path = self._collection_path / f"{tag}.txt"
         
-        Args:
-            tag: The tag to remove
-        """
-        if tag in self._tags:
-            self._tags.remove(tag)
-            # Delegate to the collection to update the tag file
-            self._collection.update_item_tag(self._name, tag, add=False)
+        try:
+            # Read existing content
+            try:
+                content = self._vfs.get_text(tag_file_path, encoding='utf-8')
+                lines = [line.strip() for line in content.splitlines() if line.strip()]
+            except VFSClientException:
+                # File doesn't exist
+                lines = []
+            
+            # Update the lines
+            if add:
+                if self._name not in lines:
+                    lines.append(self._name)
+                    lines.sort()  # Keep sorted for consistency
+            else:
+                if self._name in lines:
+                    lines.remove(self._name)
+            
+            # Write back to file
+            new_content = '\n'.join(lines) + ('\n' if lines else '')
+            self._vfs.put(tag_file_path, new_content.encode('utf-8'), create_if_missing=True)
+            
+        except Exception as e:
+            raise VFSClientException(
+                'TagUpdateError',
+                f'Failed to update tag file {tag_file_path}: {e}'
+            )
