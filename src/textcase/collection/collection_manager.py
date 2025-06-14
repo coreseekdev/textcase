@@ -24,6 +24,9 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
     collections as subdirectories.
     """
     
+    # Configuration file name constant
+    CONFIG_FILENAME = '.textcase.yml'
+    
     def __init__(self, git_repo_root: Union[Path, PurePosixPath, str], vfs: VFSClient):
         """Initialize the collection manager.
         
@@ -39,11 +42,11 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             self._git_repo_root = git_repo_root
             
         self._vfs = vfs
-        self._config_path = self._git_repo_root / '.textcase.yml'
+        self._config_path = self._git_repo_root / self.CONFIG_FILENAME
         self._collections_cache: Dict[str, ResourceCollectionImpl[T]] = {}
-        self._hierarchy: Dict[str, Dict] = {}  # collection_name -> {parent, children, path}
+        self._hierarchy: Dict[str, Dict] = {}  # collection_name -> {children, path}
+        self._parent_map: Dict[str, Optional[str]] = {}  # collection_name -> parent_name
         self._root_collection_name: Optional[str] = None
-        self._default_collection_name: Optional[str] = None
         
         # Load existing configuration
         self._load_config()
@@ -54,13 +57,6 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         if self._root_collection_name:
             return self.get_collection(self._root_collection_name)
         return None
-    
-    @property
-    def default_collection(self) -> Optional[ResourceCollection[T]]:
-        """Get the default collection for operations when no specific collection is specified."""
-        if self._default_collection_name:
-            return self.get_collection(self._default_collection_name)
-        return self.root_collection
     
     def create_collection(
         self,
@@ -94,7 +90,8 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
                 parent_path = PurePosixPath(self._hierarchy[parent]['path'])
                 collection_path = parent_path / name
             else:
-                collection_path = self._git_repo_root / 'collections' / name
+                # CASE stands for Computer-aid Software Engineering
+                collection_path = self._git_repo_root / 'case' / name
         else:
             if isinstance(path, str):
                 path = PurePosixPath(path)
@@ -113,10 +110,12 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         
         # Update hierarchy
         self._hierarchy[name] = {
-            'parent': parent,
             'children': [],
             'path': str(collection_path.relative_to(self._git_repo_root))
         }
+        
+        # Update parent relationship in memory
+        self._parent_map[name] = parent
         
         # Update parent's children list
         if parent:
@@ -147,22 +146,51 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         Returns:
             The ResourceCollection if found, None otherwise
         """
-        if name not in self._hierarchy:
+        if not name or name not in self._hierarchy:
             return None
-        
+            
+        # Return from cache if available
         if name in self._collections_cache:
             return self._collections_cache[name]
-        
-        # Load collection from hierarchy info
-        collection_info = self._hierarchy[name]
-        collection_path = self._git_repo_root / collection_info['path']
-        parent_name = collection_info['parent']
+            
+        # Create and cache collection instance
+        collection_path = self._git_repo_root / PurePosixPath(self._hierarchy[name]['path'])
+        parent_name = self._parent_map.get(name)
         parent_collection = self.get_collection(parent_name) if parent_name else None
         
         collection = ResourceCollectionImpl[T](name, collection_path, self._vfs, parent_collection)
         self._collections_cache[name] = collection
         
         return collection
+        
+    def get_parent_collection_name(self, name: str) -> Optional[str]:
+        """Get the parent collection name for a collection.
+        
+        Args:
+            name: The name of the collection to get the parent for
+            
+        Returns:
+            The parent collection name if it has one, None otherwise
+        """
+        if name not in self._hierarchy:
+            return None
+            
+        return self._parent_map.get(name)
+        
+    def get_parent_collection(self, name: str) -> Optional[ResourceCollection[T]]:
+        """Get the parent collection for a collection.
+        
+        Args:
+            name: The name of the collection to get the parent for
+            
+        Returns:
+            The parent collection if it has one, None otherwise
+        """
+        parent_name = self.get_parent_collection_name(name)
+        if not parent_name:
+            return None
+            
+        return self.get_collection(parent_name)
     
     def add_collection(self, collection: ResourceCollection[T], parent: Optional[str] = None) -> None:
         """Add an existing collection to the manager.
@@ -190,10 +218,12 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             relative_path = PurePosixPath('collections') / name
         
         self._hierarchy[name] = {
-            'parent': parent,
             'children': [],
             'path': str(relative_path)
         }
+        
+        # Update parent relationship in memory
+        self._parent_map[name] = parent
         
         # Update parent's children list
         if parent:
@@ -224,9 +254,13 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             self.remove_collection(child_name)
         
         # Remove from parent's children list
-        parent_name = self._hierarchy[name]['parent']
+        parent_name = self._parent_map.get(name)
         if parent_name and parent_name in self._hierarchy:
             self._hierarchy[parent_name]['children'].remove(name)
+            
+        # Remove from parent map
+        if name in self._parent_map:
+            del self._parent_map[name]
         
         # Remove from hierarchy
         del self._hierarchy[name]
@@ -247,8 +281,8 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         if self._root_collection_name == name:
             # Find a new root collection (one without parent)
             new_root = None
-            for coll_name, info in self._hierarchy.items():
-                if info['parent'] is None:
+            for coll_name in self._hierarchy.keys():
+                if self._parent_map.get(coll_name) is None:
                     new_root = coll_name
                     break
             self._root_collection_name = new_root
@@ -283,12 +317,12 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             raise ValueError(f"Cannot move collection '{name}' to '{new_parent}': would create circular reference")
         
         # Remove from old parent's children list
-        old_parent = self._hierarchy[name]['parent']
+        old_parent = self._parent_map.get(name)
         if old_parent and old_parent in self._hierarchy:
             self._hierarchy[old_parent]['children'].remove(name)
         
-        # Update collection's parent
-        self._hierarchy[name]['parent'] = new_parent
+        # Update collection's parent in memory
+        self._parent_map[name] = new_parent
         
         # Add to new parent's children list
         if new_parent:
@@ -344,7 +378,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         
         while current:
             path.insert(0, current)
-            current = self._hierarchy[current]['parent']
+            current = self._parent_map.get(current)
         
         return path
     
@@ -426,7 +460,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         """
         current = descendant
         while current:
-            parent = self._hierarchy.get(current, {}).get('parent')
+            parent = self._parent_map.get(current)
             if parent == ancestor:
                 return True
             current = parent
@@ -442,16 +476,35 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
                 self._hierarchy = data.get('collections', {})
                 self._root_collection_name = data.get('root_collection')
                 self._default_collection_name = data.get('default_collection')
+                
+                # Rebuild parent relationships from children lists
+                self._rebuild_parent_map()
             else:
                 self._hierarchy = {}
+                self._parent_map = {}
                 self._root_collection_name = None
                 self._default_collection_name = None
                 
         except VFSClientException:
             # Config file doesn't exist, start with empty state
             self._hierarchy = {}
+            self._parent_map = {}
             self._root_collection_name = None
             self._default_collection_name = None
+            
+    def _rebuild_parent_map(self) -> None:
+        """Rebuild the parent map from the hierarchy's children lists."""
+        # Clear existing parent map
+        self._parent_map = {}
+        
+        # Set all collections to have no parent initially
+        for name in self._hierarchy.keys():
+            self._parent_map[name] = None
+        
+        # Update parent relationships based on children lists
+        for parent_name, info in self._hierarchy.items():
+            for child_name in info.get('children', []):
+                self._parent_map[child_name] = parent_name
     
     def _save_config(self) -> None:
         """Save configuration to .textcase.yml."""
