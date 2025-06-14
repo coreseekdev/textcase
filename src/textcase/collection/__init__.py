@@ -11,7 +11,7 @@ from .collection_manager import ResourceCollectionManagerImpl
 from .collection import ResourceCollectionImpl
 from .item import ResourceItemImpl
 from .config import CollectionConfig
-from .factory import CollectionFactory, configure_default_factory, get_default_factory
+from .factory import CollectionFactory 
 
 __all__ = [
     'ResourceCollectionManagerImpl',
@@ -19,8 +19,6 @@ __all__ = [
     'ResourceItemImpl',
     'CollectionConfig',
     'CollectionFactory',
-    'configure_default_factory',
-    'get_default_factory'
 ]
 
 # Convenience aliases for easier imports

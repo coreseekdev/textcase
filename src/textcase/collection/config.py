@@ -7,7 +7,7 @@ similar to the original module_config.py implementation.
 from ast import Tuple
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union, Tuple
 
 import yaml
 
@@ -23,11 +23,11 @@ class CollectionConfig:
     within the collection directory, following the same pattern as module_config.
     """
 
-    CONFIG_FILENAME: str = '.textcase.yml'
-    """The name of the configuration file within the collection directory."""
-
     path: Union[Path, PurePosixPath]
     """The filesystem path of the collection."""
+    
+    CONFIG_FILENAME: str = '.textcase.yml'
+    """The name of the configuration file within the collection directory."""
     
     name: str = ""
     """The name of the collection."""

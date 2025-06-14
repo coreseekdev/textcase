@@ -16,6 +16,7 @@ from .core.config.config_vfs import setup_vfs_config
 from .service.service_registry_impl import create_service_registry
 from .scm.git import find_git_repo_root
 from .client.vfs_client import VFSClient, VFSClientException
+from .collection.collection_manager import ResourceCollectionManagerImpl
 
 
 
@@ -126,6 +127,9 @@ class TextCase:
         self._vfs_endpoint = None
         self._vfs_client = None
         
+        # Resource collection manager will be initialized when vfs is available
+        self._resource_manager = None
+        
     def start_services(self) -> None:
         """Start all services."""
         self._vfs_endpoint = self.service_registry.get_service('vfs')
@@ -135,6 +139,7 @@ class TextCase:
         self.service_registry.stop_service('vfs')
         self._vfs_endpoint = None
         self._vfs_client = None
+        self._resource_manager = None
         
     def get_vfs_endpoint(self) -> str:
         """Get VFS service endpoint.
@@ -157,6 +162,17 @@ class TextCase:
             endpoint = self.get_vfs_endpoint()
             self._vfs_client = VFSClient(endpoint)
         return self._vfs_client
+    
+    @property
+    def resource_manager(self) -> ResourceCollectionManagerImpl:
+        """Get resource collection manager for managing collections.
+        
+        Returns:
+            ResourceCollectionManagerImpl instance
+        """
+        if self._resource_manager is None:
+            self._resource_manager = ResourceCollectionManagerImpl(self.repo_root_path, self.vfs)
+        return self._resource_manager
         
     def get_config_value(self, key: str, default: Any = None) -> Any:
         """Get configuration value.
