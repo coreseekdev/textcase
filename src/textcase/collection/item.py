@@ -28,7 +28,8 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         self,
         name: str,
         collection: 'ResourceCollection[T]',
-        data: Optional[T] = None
+        data: Optional[T] = None,
+        vfs: Optional[VFSClient] = None
     ):
         """Initialize a resource item.
         
@@ -36,12 +37,16 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
             name: The unique name of the item within the collection
             collection: The parent collection this item belongs to
             data: Optional data payload for the item
+            vfs: Optional VFSClient for direct file operations
         """
         self._name = name
         self._collection = collection
         self._data = data
         self._tags: Set[str] = set()
         self._metadata: Dict[str, Any] = {}
+        self._vfs = vfs or getattr(collection, '_vfs', None)
+        self._collection_path = collection.path
+        self._config = collection.config
         
         # Load existing tags and metadata if item exists
         self._load_item_info()
@@ -76,6 +81,14 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
             self._tags.add(tag)
             self._update_tag_file(tag, add=True)
     
+    def assign_tag(self, tag: str) -> None:
+        """Assign a tag to this item.
+        
+        Args:
+            tag: Tag name to assign
+        """
+        self.add_tag(tag)
+    
     def remove_tag(self, tag: str) -> None:
         """Remove a tag from this item.
         
@@ -85,6 +98,14 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         if tag in self._tags:
             self._tags.remove(tag)
             self._update_tag_file(tag, add=False)
+    
+    def unassign_tag(self, tag: str) -> None:
+        """Remove a tag from this item.
+        
+        Args:
+            tag: Tag name to remove
+        """
+        self.remove_tag(tag)
     
     def has_tag(self, tag: str) -> bool:
         """Check if this item has a specific tag.
@@ -136,8 +157,12 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Returns:
             True if the item file exists, False otherwise
         """
-        # Delegate to the collection to check if the file exists
-        return self._collection.item_exists(self._name)
+        try:
+            file_path = self.get_file_path()
+            info = self._vfs.info(file_path)
+            return info is not None and not info.is_dir
+        except VFSClientException:
+            return False
     
     def create(self, content: str = "") -> None:
         """Create the item file.
@@ -148,8 +173,14 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Raises:
             VFSClientException: If the file cannot be created
         """
-        # Delegate to the collection to create the item file
-        self._collection.create_item_file(self._name, content)
+        try:
+            file_path = self.get_file_path()
+            self._vfs.put(file_path, content.encode('utf-8'), create_if_missing=True)
+        except VFSClientException as e:
+            raise VFSClientException(
+                'ItemCreateError',
+                f'Failed to create item file {file_path}: {e}'
+            )
     
     def read_content(self) -> str:
         """Read the content of the item file.
@@ -160,8 +191,14 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Raises:
             VFSClientException: If the file cannot be read
         """
-        # Delegate to the collection to read the item file
-        return self._collection.read_item_file(self._name)
+        try:
+            file_path = self.get_file_path()
+            return self._vfs.get_text(file_path, encoding='utf-8')
+        except VFSClientException as e:
+            raise VFSClientException(
+                'ItemReadError',
+                f'Failed to read item file {file_path}: {e}'
+            )
     
     def write_content(self, content: str) -> None:
         """Write content to the item file.
@@ -172,8 +209,14 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         Raises:
             VFSClientException: If the file cannot be written
         """
-        # Delegate to the collection to write the item file
-        self._collection.write_item_file(self._name, content)
+        try:
+            file_path = self.get_file_path()
+            self._vfs.put(file_path, content.encode('utf-8'), create_if_missing=True)
+        except VFSClientException as e:
+            raise VFSClientException(
+                'ItemWriteError',
+                f'Failed to write to item file {file_path}: {e}'
+            )
     
     def delete(self) -> None:
         """Delete the item file and remove from all tag files.

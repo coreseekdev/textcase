@@ -266,7 +266,22 @@ class ResourceCollection(Protocol[T]):
             Set of all tag names used by items in this collection
         """
         ...
+
+    @abstractmethod
+    def assign_tag(self, item_name: str, tag: str) -> None:
+        """Assign a tag to an item."""
+        ...
     
+    @abstractmethod
+    def unassign_tag(self, item_name: str, tag: str) -> None:
+        """Remove a tag from an item."""
+        ...
+
+    @abstractmethod
+    def has_tag(self, tag: str) -> bool:
+        """Check if a tag exists in this collection."""
+        ...
+
     # Iteration support
     @abstractmethod
     def iter_items(self) -> Iterator[ResourceItem[T]]:

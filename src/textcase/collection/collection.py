@@ -545,3 +545,21 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             add: True to add the item, False to remove it
         """
         self.tag_manager.update_item_tag(name, tag, add)
+    
+    def assign_tag(self, item_name: str, tag: str) -> None:
+        """Assign a tag to an item.
+        
+        Args:
+            item_name: Name of the item to tag
+            tag: Tag name to assign
+        """
+        self.update_item_tag(item_name, tag, add=True)
+    
+    def unassign_tag(self, item_name: str, tag: str) -> None:
+        """Remove a tag from an item.
+        
+        Args:
+            item_name: Name of the item
+            tag: Tag name to remove
+        """
+        self.update_item_tag(item_name, tag, add=False)
