@@ -353,8 +353,6 @@ class LocalVFS(ServiceVFSProtocol):
                     os.rmdir(local_path)  # Will raise OSError if directory is not empty
             return True
         except OSError as e:
-            if force:
-                return True
             raise e
     
     def mkdir(self, path: PurePosixPath, parents: bool = False, exist_ok: bool = False) -> bool:

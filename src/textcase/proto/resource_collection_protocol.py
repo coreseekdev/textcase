@@ -13,6 +13,15 @@ from typing import Dict, List, Optional, Set, TypeVar, Generic, Protocol, Iterat
 T = TypeVar('T')
 
 
+class InvalidCollectionError(Exception):
+    """Exception raised when a collection is invalid or cannot be loaded.
+    
+    This exception is raised when a collection directory does not contain
+    the required configuration file or has an invalid structure.
+    """
+    pass
+
+
 class ResourceItem(Protocol[T]):
     """Protocol for items that can be stored in a resource collection.
     
