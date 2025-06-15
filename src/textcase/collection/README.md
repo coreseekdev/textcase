@@ -83,7 +83,6 @@ collections:
     children: []
     path: "collections/requirements/detailed"
 root_collection: "requirements"
-default_collection: "requirements"
 ```
 
 ### 5. Item Naming Convention
@@ -120,7 +119,7 @@ config.prefix = "REQ"
 config.num = 3
 config.sep = "-"
 config.suffix = ".md"
-config.save(vfs)
+requirements._save_config()
 
 # Add tags
 requirements.add_tag("functional", "Functional requirements")

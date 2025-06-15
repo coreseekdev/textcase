@@ -21,6 +21,13 @@ class InvalidCollectionError(Exception):
     """
     pass
 
+class ConfigLoadError(Exception):
+    """Exception raised when a collection configuration cannot be loaded.
+    
+    This exception is raised when a collection configuration file cannot be
+    loaded or has an invalid format.
+    """
+    pass
 
 class ResourceItem(Protocol[T]):
     """Protocol for items that can be stored in a resource collection.

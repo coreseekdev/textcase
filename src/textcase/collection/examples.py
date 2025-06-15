@@ -8,6 +8,80 @@ from typing import Any, Dict
 
 from ..client.vfs_client import VFSClient
 from . import CollectionFactory, configure_default_factory
+from .collection import ResourceCollectionImpl
+
+
+def example_collection_construction(vfs_client: VFSClient, repo_root: str) -> None:
+    """Example of proper collection construction using class methods.
+    
+    This example demonstrates the correct way to create and load collections
+    using dedicated class methods instead of direct constructor calls.
+    
+    Args:
+        vfs_client: VFS client for file operations
+        repo_root: Path to git repository root
+    """
+    # For creating NEW collections, use create() class method
+    new_collection = ResourceCollectionImpl.create(
+        name='new-requirements',
+        path=PurePosixPath(repo_root) / 'case' / 'new-requirements',
+        vfs=vfs_client,
+        parent=None
+    )
+    print(f"Created new collection: {new_collection.name}")
+    
+    # Example with custom configuration
+    from .config import CollectionConfig
+    custom_config = CollectionConfig(
+        name='custom-docs',
+        prefix='DOC',
+        num=4,
+        sep='-',
+        suffix='.md',
+        tags={'draft': 'Draft documents', 'final': 'Final documents'}
+    )
+    
+    custom_collection = ResourceCollectionImpl.create(
+        name='custom-docs',
+        path=PurePosixPath(repo_root) / 'case' / 'custom-docs',
+        vfs=vfs_client,
+        parent=None,
+        config=custom_config
+    )
+    print(f"Created custom collection: {custom_collection.name} with prefix: {custom_collection.config.prefix}")
+    
+    # Example with force parameter (reinitialize existing collection)
+    try:
+        forced_collection = ResourceCollectionImpl.create(
+            name='existing-collection',
+            path=PurePosixPath(repo_root) / 'case' / 'existing-collection',
+            vfs=vfs_client,
+            parent=None,
+            force=True  # This will reinitialize even if collection exists
+        )
+        print(f"Force-created collection: {forced_collection.name}")
+    except Exception as e:
+        print(f"Force creation example: {e}")
+    
+    # For loading EXISTING collections, use from_existing() class method
+    try:
+        existing_collection = ResourceCollectionImpl.from_existing(
+            name='existing-requirements',
+            path=PurePosixPath(repo_root) / 'case' / 'existing-requirements',
+            vfs=vfs_client,
+            parent=None
+        )
+        print(f"Loaded existing collection: {existing_collection.name}")
+    except FileNotFoundError:
+        print("Existing collection not found - this is expected for new repositories")
+    
+    # AVOID direct constructor usage - this is now for internal use only:
+    # collection = ResourceCollectionImpl(name, path, vfs, parent)  # DON'T DO THIS
+    
+    # AVOID deprecated create_new method - use create() instead:
+    # collection = ResourceCollectionImpl.create_new(name, path, vfs, parent)  # DEPRECATED
+    
+    print("Collection construction example completed.")
 
 
 def example_basic_usage(vfs_client: VFSClient, repo_root: str) -> None:
@@ -35,7 +109,7 @@ def example_basic_usage(vfs_client: VFSClient, repo_root: str) -> None:
     config.num = 3
     config.sep = '-'
     config.suffix = '.md'
-    config.save(vfs_client)
+    req_collection._save_config()
     
     # Add tags to the collection
     req_collection.add_tag('functional', 'Functional requirements')
@@ -107,7 +181,6 @@ def example_project_setup(vfs_client: VFSClient, repo_root: str) -> None:
     print("Project setup complete!")
     print(f"Collections: {manager.list_collections()}")
     print(f"Root collection: {manager.root_collection.name if manager.root_collection else 'None'}")
-    print(f"Default collection: {manager.default_collection.name if manager.default_collection else 'None'}")
 
 
 def example_search_and_filter(vfs_client: VFSClient, repo_root: str) -> None:

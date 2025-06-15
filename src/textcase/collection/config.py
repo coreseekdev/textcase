@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, Union, Tuple
 import yaml
 
 from ..client.vfs_client import VFSClient, VFSClientException
-from ..proto.resource_collection_protocol import InvalidCollectionError
+from ..proto.resource_collection_protocol import InvalidCollectionError, ConfigLoadError
 
 
 @dataclass
@@ -22,15 +22,6 @@ class CollectionConfig:
     This implementation stores configuration in a YAML file at `.textcase.yml`
     within the collection directory, following the same pattern as module_config.
     """
-
-    path: Union[Path, PurePosixPath]
-    """The filesystem path of the collection."""
-    
-    CONFIG_FILENAME: str = '.textcase.yml'
-    """The name of the configuration file within the collection directory."""
-    
-    name: str = ""
-    """The name of the collection."""
     
     prefix: str = ""
     """The prefix for items in this collection (e.g., 'REQ', 'TST')."""
@@ -50,13 +41,11 @@ class CollectionConfig:
     settings: Dict[str, Any] = field(default_factory=dict)
     """Additional collection settings."""
     
-    def __init__(self, path: Union[Path, PurePosixPath], name: str = "", 
-                 prefix: str = "", num: int = 3, sep: str = "", suffix: str = "",
+    def __init__(self, prefix: str = "", num: int = 3, sep: str = "", suffix: str = "",
                  tags: Dict[str, str] = None, settings: Dict[str, Any] = None):
         """Initialize a collection configuration with specified parameters.
         
         Args:
-            path: The filesystem path of the collection
             name: The name of the collection (defaults to directory name if empty)
             prefix: The prefix for items in this collection
             num: Number of digits for item numbering
@@ -64,10 +53,8 @@ class CollectionConfig:
             suffix: Suffix for item files
             tags: Collection tags as key-description pairs
             settings: Additional collection settings
-        """
-        self.path = path
-        self.name = name if name else (path.name if path else "")
-        self.prefix = prefix if prefix else (self.name.upper()[:3] if self.name else "")
+        """ 
+        self.prefix = prefix
         self.num = num
         self.sep = sep
         self.suffix = suffix
@@ -75,12 +62,11 @@ class CollectionConfig:
         self.settings = settings or {}
     
     @classmethod
-    def load(cls, path: Union[Path, PurePosixPath], vfs: VFSClient) -> 'CollectionConfig':
+    def loads(cls, config_file: PurePosixPath, content: str) -> 'CollectionConfig':
         """Load configuration from a YAML file.
         
         Args:
-            path: The path to the collection directory
-            vfs: The VFS client to use for file operations
+            content: The YAML content to load
             
         Returns:
             A new CollectionConfig instance loaded from storage
@@ -88,64 +74,38 @@ class CollectionConfig:
         Raises:
             InvalidCollectionError: If the collection directory does not contain a valid config file
         """
-        # Convert to PurePosixPath for VFS operations
-        if isinstance(path, Path):
-            path = PurePosixPath(path.as_posix())
-        
-        CONFIG_FILENAME = cls.CONFIG_FILENAME
-        config_path = path / CONFIG_FILENAME
-        
-        # Check if config file exists
-        try:
-            info = vfs.info(config_path)
-            if not info:  # File doesn't exist
-                raise InvalidCollectionError(f"Collection at '{path}' is invalid: Missing {CONFIG_FILENAME} file")
-        except VFSClientException:
-            raise InvalidCollectionError(f"Collection at '{path}' is invalid: Cannot access {CONFIG_FILENAME} file")
-            
-        try:
-            content = vfs.get_text(config_path, encoding='utf-8')
-            if not content:
-                raise InvalidCollectionError(f"Collection at '{path}' is invalid: Empty {CONFIG_FILENAME} file")
-                
+        if not content:
+            raise InvalidCollectionError(f"Collection config file {config_file} is invalid")
+
+        try:            
             data = yaml.safe_load(content) or {}
-            
             return cls(
-                path=path,
-                name=data.get('name', path.name),
-                prefix=data.get('prefix', path.name.upper()[:3]),
+                prefix=data.get('prefix', ""),
                 num=data.get('num', 3),
                 sep=data.get('sep', ''),
                 suffix=data.get('suffix', '.md'),
                 tags=data.get('tags', {}),
                 settings=data.get('settings', {})
             )
-            
-        except InvalidCollectionError:
-            raise
         except Exception as e:
-            raise VFSClientException(
-                'ConfigLoadError',
+            raise ConfigLoadError(
                 f'Failed to load collection config from {config_path}: {e}'
             )
     
     @classmethod
-    def _create_default_config(cls, path: Union[Path, PurePosixPath]) -> 'CollectionConfig':
+    def _create_default_config(cls, prefix:str) -> 'CollectionConfig':
         """Create a default configuration for a new collection.
         
         Args:
-            path: The path to the collection directory
+            prefix: The prefix of the collection (defaults to directory name if empty)
             
         Returns:
             A new CollectionConfig with default values
         """
-        if isinstance(path, Path):
-            path = PurePosixPath(path.as_posix())
-            
+        assert prefix, "prefix must be set"
+        
         return cls(
-            path=path,
-            name=path.name,
-            prefix=path.name.upper()[:3],
+            prefix=prefix,
             num=3,
             sep='',
             suffix='.md',
@@ -153,7 +113,7 @@ class CollectionConfig:
             settings={}
         )
     
-    def save(self, vfs: VFSClient) -> None:
+    def dumps(self) -> str:
         """Save configuration to a YAML file.
         
         Args:
@@ -162,10 +122,8 @@ class CollectionConfig:
         Raises:
             VFSClientException: If the configuration file cannot be written
         """
-        config_path = self.path / CONFIG_FILENAME
         
         data = {
-            'name': self.name,
             'prefix': self.prefix,
             'num': self.num,
             'sep': self.sep,
@@ -173,16 +131,8 @@ class CollectionConfig:
             'tags': self.tags,
             'settings': self.settings
         }
-        
-        try:
-            content = yaml.dump(data, default_flow_style=False, allow_unicode=True)
-            vfs.put(config_path, content.encode('utf-8'), create_if_missing=True)
-        except Exception as e:
-            raise VFSClientException(
-                'ConfigSaveError',
-                f'Failed to save collection config to {config_path}: {e}'
-            )
-    
+        return yaml.dump(data, default_flow_style=False, allow_unicode=True)
+
     def get_item_filename(self, item_name: str) -> str:
         """Generate filename for an item based on collection configuration.
         

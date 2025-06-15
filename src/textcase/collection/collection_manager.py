@@ -42,7 +42,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             self._git_repo_root = git_repo_root
             
         self._vfs = vfs
-        self._config_path = self._git_repo_root / self.CONFIG_FILENAME
+        self._config_path = self._vfs.to_vfs_path(self._git_repo_root.joinpath(self.CONFIG_FILENAME))
         self._collections_cache: Dict[str, ResourceCollectionImpl[T]] = {}
         self._hierarchy: Dict[str, Dict] = {}  # collection_name -> {children, path}
         self._parent_map: Dict[str, Optional[str]] = {}  # collection_name -> parent_name
@@ -107,35 +107,9 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         
         # Create collection instance
         parent_collection = self.get_collection(parent) if parent else None
-        collection = ResourceCollectionImpl[T](name, collection_path, self._vfs, parent_collection)
-        
-        # Update hierarchy
-        self._hierarchy[name] = {
-            'children': [],
-            'path': str(collection_path.relative_to(self._git_repo_root))
-        }
-        
-        # Update parent relationship in memory
-        self._parent_map[name] = parent
-        
-        # Update parent's children list
-        if parent:
-            self._hierarchy[parent]['children'].append(name)
-        
-        # Set as root collection if it's the first one
-        if not self._root_collection_name:
-            self._root_collection_name = name
-        
-        # Set as default collection if not set
-        if not self._default_collection_name:
-            self._default_collection_name = name
-        
-        # Cache the collection
-        self._collections_cache[name] = collection
-        
-        # Save configuration
-        self._save_config()
-        
+        collection = ResourceCollectionImpl.create(name, collection_path, self._vfs, parent_collection)
+
+        self.add_collection(collection, parent)
         return collection
     
     def get_collection(self, name: str) -> Optional[ResourceCollection[T]]:
@@ -159,7 +133,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         parent_name = self._parent_map.get(name)
         parent_collection = self.get_collection(parent_name) if parent_name else None
         
-        collection = ResourceCollectionImpl[T](name, collection_path, self._vfs, parent_collection)
+        collection = ResourceCollectionImpl.from_existing(name, collection_path, self._vfs, parent_collection)
         self._collections_cache[name] = collection
         
         return collection
@@ -210,13 +184,19 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         # Validate parent exists if specified
         if parent and parent not in self._hierarchy:
             raise ValueError(f"Parent collection '{parent}' does not exist")
+        if not parent:
+            # 仅 root collection 可以没有 parent
+            if self._root_collection_name:
+                raise ValueError(f"Root collection '{self._root_collection_name}' already exists")
         
         # Add to hierarchy
         if isinstance(collection, ResourceCollectionImpl):
-            relative_path = collection.path.relative_to(self._git_repo_root)
+            # 由于理论上，所有的第三方 repo 都需要挂接在 root vfs 中，因此 记录的是 vfs path
+            relative_path = collection.path.relative_to(self._vfs.mount_point())
         else:
+            raise NotImplemented
             # For external collections, we need to determine the path
-            relative_path = PurePosixPath('collections') / name
+            # relative_path = PurePosixPath('collections') / name
         
         self._hierarchy[name] = {
             'children': [],
@@ -229,7 +209,9 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         # Update parent's children list
         if parent:
             self._hierarchy[parent]['children'].append(name)
-        
+        else:
+            self._root_collection_name = name
+
         # Cache the collection
         if isinstance(collection, ResourceCollectionImpl):
             self._collections_cache[name] = collection
@@ -476,7 +458,6 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
                 
                 self._hierarchy = data.get('collections', {})
                 self._root_collection_name = data.get('root_collection')
-                self._default_collection_name = data.get('default_collection')
                 
                 # Rebuild parent relationships from children lists
                 self._rebuild_parent_map()
@@ -485,8 +466,8 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
                 self._parent_map = {}
                 self._root_collection_name = None
                 self._default_collection_name = None
-                
-        except VFSClientException:
+
+        except FileNotFoundError:
             # Config file doesn't exist, start with empty state
             self._hierarchy = {}
             self._parent_map = {}
@@ -512,7 +493,6 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         data = {
             'collections': self._hierarchy,
             'root_collection': self._root_collection_name,
-            'default_collection': self._default_collection_name
         }
         
         try:

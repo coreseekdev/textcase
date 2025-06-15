@@ -252,7 +252,7 @@ class LocalVFS(ServiceVFSProtocol):
         """
         # Ensure path is relative (should already be handled by resolve_path)
         if path.is_absolute():
-            raise ValueError(f"Expected relative path, got absolute: {path}")
+           raise ValueError(f"Expected relative path, got absolute: {path}")
         
         # Convert PurePosixPath to local path using pathlib
         local_path = self.root_path / Path(*path.parts)
@@ -281,7 +281,7 @@ class LocalVFS(ServiceVFSProtocol):
             return vfs.info(remaining_path)
         
         # 否则，使用本地文件系统
-        local_path = self._resolve_local_path(path)
+        local_path = self._resolve_local_path(remaining_path)
         if not os.path.exists(local_path):
             raise FileNotFoundError(f"Path not found: {path}")
         
@@ -314,13 +314,13 @@ class LocalVFS(ServiceVFSProtocol):
             return vfs.list(remaining_path, option)
         
         # 否则，使用本地文件系统
-        local_path = self._resolve_local_path(path)
+        local_path = self._resolve_local_path(remaining_path)
         if not os.path.isdir(local_path):
             raise NotADirectoryError(f"Not a directory: {path}")
         
         items = []
         for item in os.listdir(local_path):
-            item_path = path.joinpath(item)
+            item_path = remaining_path.joinpath(item)
             item_local_path = self._resolve_local_path(item_path)
             is_dir = os.path.isdir(item_local_path)
             
@@ -358,7 +358,7 @@ class LocalVFS(ServiceVFSProtocol):
             return vfs.get(remaining_path)
         
         # 否则，使用本地文件系统
-        local_path = self._resolve_local_path(path)
+        local_path = self._resolve_local_path(remaining_path)
         
         if not os.path.isfile(local_path):
             raise FileNotFoundError(f"File not found: {path}")
@@ -403,7 +403,7 @@ class LocalVFS(ServiceVFSProtocol):
             return vfs.put(remaining_path, content, create_if_missing)
         
         # 否则，使用本地文件系统
-        local_path = self._resolve_local_path(path)
+        local_path = self._resolve_local_path(remaining_path)
         
         # Check if file exists and create_if_missing is False
         if not os.path.exists(local_path) and not create_if_missing:
@@ -443,7 +443,7 @@ class LocalVFS(ServiceVFSProtocol):
             return vfs.remove(remaining_path, force)
         
         # 否则，使用本地文件系统
-        local_path = self._resolve_local_path(path)
+        local_path = self._resolve_local_path(remaining_path)
         
         if not os.path.exists(local_path):
             if force:
@@ -490,7 +490,7 @@ class LocalVFS(ServiceVFSProtocol):
             return vfs.mkdir(remaining_path, parents, exist_ok)
         
         # 否则，使用本地文件系统
-        local_path = self._resolve_local_path(path)
+        local_path = self._resolve_local_path(remaining_path)
         
         try:
             os.makedirs(local_path, exist_ok=exist_ok)

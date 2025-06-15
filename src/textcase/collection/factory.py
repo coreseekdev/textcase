@@ -190,7 +190,7 @@ class CollectionFactory:
                 if 'suffix' in config:
                     coll_config.suffix = config['suffix']
                 
-                coll_config.save(self._vfs)
+                collection._save_config()
                 
                 # Add tags
                 if 'tags' in config:

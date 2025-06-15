@@ -263,7 +263,7 @@ class CollectionTagManager:
         # Update config
         config = self._collection.config
         config.tags[tag] = description
-        config.save(self._vfs)
+        self._collection._save_config()
         
         # Create tag manager and ensure file exists
         tag_manager = self.get_tag_manager(tag)
@@ -290,7 +290,7 @@ class CollectionTagManager:
         
         # Remove from config
         del config.tags[tag]
-        config.save(self._vfs)
+        self._collection._save_config()
         
         # Delete tag file
         tag_manager = self.get_tag_manager(tag)

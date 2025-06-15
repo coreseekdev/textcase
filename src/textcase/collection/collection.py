@@ -27,7 +27,9 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
     
     # File extension for tag files - now managed by TagManager
     TAG_FILE_EXTENSION: str = '.list'
-    
+    # Name of the configuration file within the collection directory
+    CONFIG_FILENAME: str = '.textcase.yml'
+
     def __init__(
         self,
         name: str,
@@ -36,6 +38,10 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         parent: Optional['ResourceCollectionImpl[T]'] = None
     ):
         """Initialize a resource collection.
+        
+        Note: This constructor is for internal use. Use class methods:
+        - create() for creating new collections
+        - from_existing() for loading existing collections
         
         Args:
             name: The unique name of the collection
@@ -51,10 +57,129 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         self._items_cache: Dict[str, ResourceItemImpl[T]] = {}
         self._collections_cache: Dict[str, 'ResourceCollectionImpl[T]'] = {}
         self._tag_manager: Optional[CollectionTagManager] = None
+    
+    @classmethod
+    def create(
+        cls,
+        name: str,
+        path: Union[PurePosixPath, str],
+        vfs: VFSClient,
+        parent: Optional['ResourceCollectionImpl[T]'] = None,
+        config: Optional[CollectionConfig] = None,
+        force: bool = False
+    ) -> 'ResourceCollectionImpl[T]':
+        """Create a new resource collection.
         
-        # Ensure directory exists and load configuration
-        self._ensure_directory_exists()
-        self._load_config()
+        This method will:
+        - Check if collection already exists (unless force=True)
+        - Use provided config or create default configuration
+        - Ensure the directory exists
+        - Save the configuration to disk
+        
+        Args:
+            name: The unique name of the collection
+            path: Path to the collection directory
+            vfs: VFS client for file operations
+            parent: Optional parent collection
+            config: Optional collection configuration (uses default if None)
+            force: If True, force initialization even if .textcase.yml exists
+            
+        Returns:
+            A new ResourceCollectionImpl instance
+            
+        Raises:
+            ValueError: If collection already exists and force=False
+        """
+        
+        _path = PurePosixPath(path) if isinstance(path, str) else path
+        config_path = _path.joinpath(cls.CONFIG_FILENAME)
+        
+        # Check if collection already exists
+        if not force:
+            try:
+                # Try to load existing config to check if collection exists
+                content = vfs.get_text(config_path, encoding='utf-8')
+                if content.strip():  # Non-empty config file exists
+                    existing_config = CollectionConfig.loads(config_path, content)
+                    raise ValueError(
+                        f"Collection already exists at '{path}' with prefix '{existing_config.prefix}'. "
+                        f"Use force=True to reinitialize (warning: previous records may become inaccessible "
+                        f"if prefix changes)."
+                    )
+            except FileNotFoundError:
+                # Config file doesn't exist, safe to create
+                pass
+        
+        # 尝试构建 collection
+        instance = cls(name, _path, vfs, parent)
+
+        # Ensure directory exists
+        instance._ensure_directory_exists()
+        
+        # Use provided config or create default
+        if config is not None:
+            instance._config = config
+        else:
+            instance._config = CollectionConfig._create_default_config(name.upper()[:3])
+        
+        # Save configuration
+        instance._save_config()
+        return instance
+    
+    @classmethod
+    def create_new(
+        cls,
+        name: str,
+        path: Union[PurePosixPath, str],
+        vfs: VFSClient,
+        parent: Optional['ResourceCollectionImpl[T]'] = None
+    ) -> 'ResourceCollectionImpl[T]':
+        """Create a new resource collection (deprecated).
+        
+        This method is deprecated. Use create() instead.
+        
+        Args:
+            name: The unique name of the collection
+            path: Path to the collection directory
+            vfs: VFS client for file operations
+            parent: Optional parent collection
+            
+        Returns:
+            A new ResourceCollectionImpl instance
+        """
+        return cls.create(name, path, vfs, parent)
+    
+    @classmethod
+    def from_existing(
+        cls,
+        name: str,
+        path: Union[PurePosixPath, str],
+        vfs: VFSClient,
+        parent: Optional['ResourceCollectionImpl[T]'] = None
+    ) -> 'ResourceCollectionImpl[T]':
+        """Load an existing resource collection.
+        
+        This method is specifically for loading existing collections and will:
+        - Load configuration from disk
+        - Validate the collection structure
+        
+        Args:
+            name: The unique name of the collection
+            path: Path to the collection directory
+            vfs: VFS client for file operations
+            parent: Optional parent collection
+            
+        Returns:
+            A ResourceCollectionImpl instance loaded from existing data
+            
+        Raises:
+            FileNotFoundError: If the collection directory or config doesn't exist
+            ValueError: If the collection configuration is invalid
+        """
+        instance = cls(name, path, vfs, parent)
+        # For existing collections, load configuration
+        instance._load_config()
+        return instance
     
     @property
     def name(self) -> str:
@@ -401,22 +526,49 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             if not info:
                 # Directory doesn't exist, create it
                 self._vfs.mkdir(self._path, parents=True, exist_ok=True)
-        except VFSClientException:
+        except FileNotFoundError:
             # Directory doesn't exist, create it
             try:
                 self._vfs.mkdir(self._path, parents=True, exist_ok=True)
-            except VFSClientException:
-                # If mkdir fails, we'll let the error propagate
+            except FileExistsError:
+                # 如果文件已经存在，则无需处理任何事
                 pass
     
     def _load_config(self) -> None:
         """Load collection configuration from .textcase.yml."""
-        self._config = CollectionConfig.load(self._path, self._vfs)
+        config_path = self._path / self.CONFIG_FILENAME
+        
+        try:
+            # Try to load existing config
+            content = self._vfs.get_text(config_path, encoding='utf-8')
+            if content:
+                self._config = CollectionConfig.loads(config_path, content)
+            else:
+                # Create default config if file is empty
+                self._config = CollectionConfig._create_default_config(self._name)
+                self._save_config()
+        except FileNotFoundError:
+            # Create default config if file doesn't exist
+            self._config = CollectionConfig._create_default_config(self._name)
+            self._save_config()
         
         # Update name if it differs
         if self._config.name != self._name:
             self._config.name = self._name
-            self._config.save(self._vfs)
+            self._save_config()
+    
+    def _save_config(self) -> None:
+        """Save collection configuration to .textcase.yml."""
+        config_path = self._path / self.CONFIG_FILENAME
+        content = self._config.dumps()
+        
+        try:
+            self._vfs.put(config_path, content.encode('utf-8'), create_if_missing=True)
+        except Exception as e:
+            raise VFSClientException(
+                'ConfigSaveError',
+                f'Failed to save collection config to {config_path}: {e}'
+            )
     
     def item_exists(self, name: str) -> bool:
         """Check if an item file exists.

@@ -93,17 +93,30 @@ class VFSClient:
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            # Check if this is a server-side VFSServerException
-            if hasattr(e, 'exception_type') and hasattr(e, 'original_message'):
-                raise VFSClientException.from_server_exception(e)
-            else:
-                # For other exceptions, wrap them as client exceptions
-                raise VFSClientException(
-                    type(e).__name__,
-                    str(e),
-                    None
-                )
-    
+            # Check if this is a zerorpc RemoteError with JSON exception info
+            if type(e).__name__ == 'RemoteError':
+                exception_type, message, traceback = e.args
+                # Reconstruct the original exception
+                if exception_type == 'FileNotFoundError':
+                    original_exception = FileNotFoundError(message)
+                    original_exception.server_traceback = traceback
+                    raise original_exception
+                elif exception_type == 'PermissionError':
+                    original_exception = PermissionError(message)
+                    original_exception.server_traceback = traceback
+                    raise original_exception
+                elif exception_type == 'ValueError':
+                    original_exception = ValueError(message)
+                    original_exception.server_traceback = traceback
+                    raise original_exception
+                else:
+                    # For other exception types, create a VFSClientException
+                    raise VFSClientException(
+                        exception_type, message, traceback
+                    )
+
+            return None
+
     def name(self) -> str:
         """Get the name of the VFS service.
         
