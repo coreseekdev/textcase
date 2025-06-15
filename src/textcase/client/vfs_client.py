@@ -10,6 +10,7 @@ import zerorpc
 from typing import Optional, Any, Dict, List, Tuple, Union
 from pathlib import PurePosixPath, Path
 from ..proto.service_vfs_protocol import EntryType
+from ..service.error_result import ErrorResult, is_error_result, ResultOrError
 
 
 class VFSClientException(Exception):
@@ -88,10 +89,35 @@ class VFSClient:
             Function result
             
         Raises:
-            VFSClientException: If server returns a VFSServerException
+            VFSClientException: If server returns a VFSServerException or ErrorResult
         """
         try:
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            
+            # Check if the result is an ErrorResult
+            if is_error_result(result):
+                _, error_type, message, traceback_str = result
+                # Reconstruct the original exception based on error type
+                if error_type == 'FileNotFoundError':
+                    original_exception = FileNotFoundError(message)
+                    original_exception.server_traceback = traceback_str
+                    raise original_exception
+                elif error_type == 'PermissionError':
+                    original_exception = PermissionError(message)
+                    original_exception.server_traceback = traceback_str
+                    raise original_exception
+                elif error_type == 'ValueError':
+                    original_exception = ValueError(message)
+                    original_exception.server_traceback = traceback_str
+                    raise original_exception
+                else:
+                    # For other exception types, create a VFSClientException
+                    raise VFSClientException(
+                        error_type, message, traceback_str
+                    )
+            
+            return result
+            
         except Exception as e:
             # Check if this is a zerorpc RemoteError with JSON exception info
             if type(e).__name__ == 'RemoteError':
@@ -114,8 +140,9 @@ class VFSClient:
                     raise VFSClientException(
                         exception_type, message, traceback
                     )
-
-            return None
+            
+            # Re-raise other exceptions as-is
+            raise e
 
     def name(self) -> str:
         """Get the name of the VFS service.
