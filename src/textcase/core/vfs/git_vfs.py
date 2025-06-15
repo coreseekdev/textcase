@@ -4,7 +4,7 @@ This module provides a git file system implementation that uses pygit2
 to access git repositories and provides read-only access to git trees.
 """
 
-from pathlib import PurePosixPath
+from pathlib import PurePosixPath, Path
 from typing import Dict, List, Optional, Tuple, Any
 import os
 import time
@@ -24,7 +24,7 @@ class GitVFS(ServiceVFSProtocol):
     supporting access by branch, tag, or commit hash.
     """
     
-    def __init__(self, repo_path: str):
+    def __init__(self, repo_path: Path, mount_point: PurePosixPath, name: Optional[str] = None):
         """Initialize the git file system VFS.
         
         Args:
@@ -33,15 +33,28 @@ class GitVFS(ServiceVFSProtocol):
         if pygit2 is None:
             raise ImportError("pygit2 is required for GitVFS")
             
-        self.repo_path = repo_path
+        self.repo_path = repo_path.absolute()
+        self._mount_point = mount_point
         self._repo = pygit2.Repository(repo_path)
-        self._name = f"git:{repo_path}"
-        self._mounts = {}
+        self._name = f"git:{self.repo_path.as_posix()}" if name is None else name
+        self._mounts = {}  # 始终为空，因为 .git 用于读取 git 仓库，不支持 mount
     
     def name(self) -> str:
         """Get the name of the VFS service."""
         return self._name
     
+    def mount_point(self) -> PurePosixPath:
+        """Get the root path of the VFS service.
+        
+        Returns:
+            Root path
+        """
+        return self._mount_point
+    
+    def to_vfs_path(self, local_path: Path) -> Optional[PurePosixPath]:
+        # Git VFS is not directly mapped to local file system paths
+        return None
+
     def resolve_path(self, path: PurePosixPath) -> Tuple['ServiceVFSProtocol', PurePosixPath]:
         """Resolve a path to VFS and remaining path info.
         

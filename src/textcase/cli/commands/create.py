@@ -58,6 +58,8 @@ def create(ctx: click.Context, collection_name: str, collection_path: Path,
             return
         except Exception as e:
             click.echo(f"Error: Failed to create TextCase instance: {e}", err=True)
+            import traceback
+            print(traceback.format_exc())
             ctx.exit(1)
     
     # If we have a parent, we're creating a subcollection in an existing project

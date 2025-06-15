@@ -7,7 +7,7 @@ for proper client-side reconstruction.
 
 import json
 import traceback
-from pathlib import PurePosixPath
+from pathlib import PurePosixPath, Path
 from typing import Dict, List, Optional, Tuple, Any, Union
 
 from ..core.vfs.repo_vfs import RepoVFS
@@ -52,7 +52,7 @@ class VFSServer:
     interfaces while preserving exception information for client reconstruction.
     """
     
-    def __init__(self, service_name: str, repo_path: str):
+    def __init__(self, service_name: str, repo_path: Path):
 
         """Initialize VFS server.
         
@@ -61,7 +61,7 @@ class VFSServer:
         """
         self._name = service_name
         self.repo_path = repo_path
-        self._vfs = RepoVFS(repo_path)
+        self._vfs = RepoVFS(repo_path, PurePosixPath('/'))  # 作为 root vfs.
     
     def _handle_exception(self, e: Exception) -> VFSServerException:
         """Convert exception to VFSServerException for serialization.
@@ -298,4 +298,4 @@ def create_vfs_service(service_name:str, service_registry: ServiceRegistry) -> V
     repo_path = service_registry.config_service.get("vfs.root_path", None)
     if repo_path is None:
         raise ValueError("VFS repo_path not set in config service")
-    return VFSServer(service_name, repo_path)
+    return VFSServer(service_name, Path(repo_path))

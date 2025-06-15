@@ -4,7 +4,7 @@ This module provides a repository file system implementation that combines
 local file system access with git repository functionality.
 """
 
-from pathlib import PurePosixPath
+from pathlib import PurePosixPath, Path
 from typing import Dict, List, Optional, Tuple, Any
 import os
 
@@ -23,14 +23,18 @@ class RepoVFS(ServiceVFSProtocol):
     are forwarded to LocalVFS.
     """
     
-    def __init__(self, repo_path: str):
+    def __init__(self, repo_path: Path, mount_point: PurePosixPath, name: Optional[str] = None):
         """Initialize the repository file system VFS.
         
         Args:
             repo_path: Root path of the git repository
         """
-        self.repo_path = os.path.abspath(repo_path)
-        self._name = f"repo:{self.repo_path}"
+        self.repo_path = repo_path.absolute()
+        self._mount_point = mount_point
+        if name:
+            self._name = name
+        else:
+            self._name = f"repo:{self.repo_path.as_posix()}"
         
         # Verify it's a git repository
         if not os.path.exists(os.path.join(repo_path, '.git')):
@@ -38,17 +42,42 @@ class RepoVFS(ServiceVFSProtocol):
             raise ValueError(f"Not a git repository: {repo_path}")
         
         # Initialize components
-        self._local_vfs = LocalVFS(repo_path)
-        self._git_vfs = GitVFS(repo_path)
+        self._local_vfs = LocalVFS(repo_path, self._mount_point)    # 实际的实现是转发，.git 
+        git_mount_point = self._mount_point.joinpath('.git')
+        self._git_vfs = GitVFS(repo_path, git_mount_point)
         
         # Auto-mount .git/ to GitVFS (both relative and absolute paths)
-        self._local_vfs.mount(PurePosixPath('.git'), self._git_vfs)  # 相对路径
-        self._local_vfs.mount(PurePosixPath('/.git'), self._git_vfs)  # 绝对路径
+        self._local_vfs.mount(git_mount_point, self._git_vfs)  # 相对路径
     
     def name(self) -> str:
         """Get the name of the VFS service."""
         return self._name
-    
+
+    def mount_point(self) -> PurePosixPath:
+        """Get the root path of the VFS service."""
+        return self._mount_point
+
+    def to_vfs_path(self, local_path: Path) -> Optional[PurePosixPath]:
+        """Convert a local file system path to a VFS path if possible.
+        
+        This method attempts to convert a path from the local file system
+        to its equivalent path in the VFS. It handles mounted VFS instances
+        by checking if the local path belongs to any mounted VFS and delegating
+        the conversion if necessary.
+        
+        Args:
+            local_path: Local file system path to convert
+            
+        Returns:
+            Equivalent VFS path as PurePosixPath if conversion is possible,
+            None if the path cannot be mapped to this VFS
+            
+        Raises:
+            ValueError: If the path format is invalid
+        """
+        # 委托给LocalVFS处理
+        return self._local_vfs.to_vfs_path(local_path)
+
     def resolve_path(self, path: PurePosixPath) -> Tuple['ServiceVFSProtocol', PurePosixPath]:
         """Resolve a path to VFS and remaining path info.
         
@@ -256,3 +285,4 @@ class RepoVFS(ServiceVFSProtocol):
             Success status
         """
         return self._local_vfs.close_session(session_id)
+    
