@@ -563,3 +563,98 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             tag: Tag name to remove
         """
         self.update_item_tag(item_name, tag, add=False)
+    
+    # Sub-collection management methods required by ResourceCollection protocol
+    @property
+    def item_names(self) -> List[str]:
+        """Get all items in this collection.
+        
+        Returns:
+            List of item names
+        """
+        # Build a dictionary of all items
+        return self.list_items()
+    
+    @property
+    def collections(self) -> Dict[str, 'ResourceCollection[T]']:
+        """Get all sub-collections of this collection.
+        
+        Returns:
+            Dictionary mapping sub-collection names to collection instances
+        """
+        # This is a placeholder implementation
+        return {}
+    
+    def add_collection(self, collection: 'ResourceCollection[T]') -> None:
+        """Add a sub-collection to this collection.
+        
+        Args:
+            collection: Sub-collection to add
+            
+        Raises:
+            ValueError: If a sub-collection with the same name already exists
+        """
+        # This is a placeholder implementation
+        # In a real implementation, we would create a sub-directory
+        # and initialize it as a collection
+        pass
+    
+    def remove_collection(self, name: str) -> Optional['ResourceCollection[T]']:
+        """Remove a sub-collection from this collection.
+        
+        Args:
+            name: Name of the sub-collection to remove
+            
+        Returns:
+            The removed sub-collection, or None if not found
+        """
+        # This is a placeholder implementation
+        return None
+    
+    def get_collection(self, name: str) -> Optional['ResourceCollection[T]']:
+        """Get a sub-collection by name.
+        
+        Args:
+            name: Name of the sub-collection to retrieve
+            
+        Returns:
+            The sub-collection if found, None otherwise
+        """
+        # This is a placeholder implementation
+        return None
+    
+    def has_collection(self, name: str) -> bool:
+        """Check if a sub-collection exists.
+        
+        Args:
+            name: Name of the sub-collection to check
+            
+        Returns:
+            True if the sub-collection exists, False otherwise
+        """
+        # This is a placeholder implementation
+        return False
+    
+    def size(self) -> int:
+        """Get the number of items in this collection.
+        
+        Returns:
+            Number of items (not including sub-collections)
+        """
+        return len(self.list_items())
+    
+    def is_empty(self) -> bool:
+        """Check if this collection is empty (has no items).
+        
+        Returns:
+            True if the collection has no items, False otherwise
+        """
+        return len(self.list_items()) == 0
+    
+    def size(self) -> int:
+        """Get the number of items in this collection.
+        
+        Returns:
+            The number of items
+        """
+        return len(self.list_items())

@@ -21,6 +21,7 @@ import click
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+from textcase.textcase import TextCaseFactory
 from textcase.cli.utils import debug_echo
 
 @click.command()
@@ -43,7 +44,24 @@ def create(ctx: click.Context, collection_name: str, collection_path: Path,
     """
     # Get TextCase instance from context
     textcase = ctx.obj.get('textcase')
-    if not textcase:
+    
+    # For create command, we need to create a new TextCase instance if one doesn't exist
+    if textcase is None:
+        try:
+            # Create a new TextCase instance using the collection_path
+            textcase = TextCaseFactory.create(
+                file_path=collection_path,
+                collection_name=collection_name
+            )
+            ctx.obj['textcase'] = textcase
+            click.echo(f"Created new TextCase project at {collection_path} with root collection '{collection_name}'")
+            return
+        except Exception as e:
+            click.echo(f"Error: Failed to create TextCase instance: {e}", err=True)
+            ctx.exit(1)
+    
+    # If we have a parent, we're creating a subcollection in an existing project
+    if parent is not None and textcase is None:
         click.echo("Error: No valid TextCase instance found.", err=True)
         ctx.exit(1)
     

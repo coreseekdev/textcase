@@ -101,11 +101,11 @@ class ResourceCollection(Protocol[T]):
     
     @property
     @abstractmethod
-    def items(self) -> Dict[str, ResourceItem[T]]:
-        """Get all items in this collection.
+    def item_names(self) -> List[str]:
+        """Get all item names in this collection.
         
         Returns:
-            Dictionary mapping item names to item instances
+            List of item names
         """
         ...
     

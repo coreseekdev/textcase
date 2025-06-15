@@ -32,6 +32,63 @@ class TextCaseFactory:
     
     _instance_cache = WeakValueDictionary()
     
+    @classmethod
+    def create(cls, file_path: Union[str, Path], collection_name: str = "ROOT") -> 'TextCase':
+        """Create a TextCase instance from scratch.
+        
+        This method:
+        1. Determines the Git repository root from the given file_path (if possible)
+        2. Initializes a new TextCase instance
+        3. Creates a root collection at the specified file_path
+        
+        Args:
+            file_path: Path where the root collection will be created
+            collection_name: Name for the root collection (default: "ROOT")
+            
+        Returns:
+            Configured TextCase instance with initialized root collection
+        """
+        # Create factory instance
+        factory = cls()
+        
+        # Convert to absolute path
+        abs_path = os.path.abspath(str(file_path))
+        
+        # If it's a file, get its directory
+        if os.path.isfile(abs_path):
+            search_path = os.path.dirname(abs_path)
+        else:
+            search_path = abs_path
+            
+        # Try to find Git repository root
+        git_info = find_git_repo_root(search_path)
+        
+        if git_info and git_info.repo_root:
+            # Use Git repository root
+            repo_root_path = git_info.repo_root
+        else:
+            # No Git repository found, use the search path as repo root
+            repo_root_path = search_path
+        
+        # Create new instance
+        instance = TextCase(repo_root_path, factory.config_service)
+        
+        # Start services to ensure VFS is available
+        instance.start_services()
+        
+        # Create root collection at the specified path
+        instance.resource_manager.create_collection(
+            name=collection_name,
+            parent=None,
+            path=abs_path
+        )
+        
+        # Cache the instance
+        cache_key = (repo_root_path, factory.config_file)
+        cls._instance_cache[cache_key] = instance
+        
+        return instance
+    
     def __init__(self, config_file: Optional[str] = None):
         """Initialize TextCase factory.
         

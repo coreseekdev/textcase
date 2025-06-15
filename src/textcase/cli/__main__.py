@@ -57,12 +57,14 @@ def cli(ctx: click.Context, project: Optional[str], verbose: bool):
     
     # Special handling for 'create' command - don't require valid project
     if ctx.invoked_subcommand == 'create':
+        # For 'create' command, we still need a TextCase instance but we'll create it on demand
+        # when the command is executed, using the path provided in the command arguments
         return
     
     # For all other commands, ensure we have a valid TextCase instance
     try:
         # Create TextCase instance
-        textcase = TextCaseFactory.create(str(project_path))
+        textcase = TextCaseFactory().get(str(project_path))
         ctx.obj['textcase'] = textcase
         
         if verbose:
