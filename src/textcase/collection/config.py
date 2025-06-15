@@ -103,7 +103,7 @@ class CollectionConfig:
             A new CollectionConfig with default values
         """
         assert prefix, "prefix must be set"
-        
+
         return cls(
             prefix=prefix,
             num=3,
@@ -128,9 +128,13 @@ class CollectionConfig:
             'num': self.num,
             'sep': self.sep,
             'suffix': self.suffix,
-            'tags': self.tags,
-            'settings': self.settings
         }
+        # 有数据才会出现的配置项
+        if self.settings:
+            data['settings'] = self.settings
+        if self.tags:
+            data['tags'] = self.tags
+
         return yaml.dump(data, default_flow_style=False, allow_unicode=True)
 
     def get_item_filename(self, item_name: str) -> str:
