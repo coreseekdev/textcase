@@ -32,8 +32,7 @@ class TextCaseFactory:
     
     _instance_cache = WeakValueDictionary()
     
-    @classmethod
-    def create(cls, file_path: Union[str, Path], collection_name: str = "ROOT") -> 'TextCase':
+    def create(self, file_path: Union[str, Path], collection_name: str = "ROOT") -> 'TextCase':
         """Create a TextCase instance from scratch.
         
         This method:
@@ -48,8 +47,8 @@ class TextCaseFactory:
         Returns:
             Configured TextCase instance with initialized root collection
         """
-        # Create factory instance
-        factory = cls()
+        # Use current factory instance
+        factory = self
         
         # Convert to absolute path
         abs_path = os.path.abspath(str(file_path))
@@ -88,7 +87,7 @@ class TextCaseFactory:
         
         # Cache the instance
         cache_key = (repo_root_path, factory.config_file)
-        cls._instance_cache[cache_key] = instance
+        self.__class__._instance_cache[cache_key] = instance
         
         return instance
     

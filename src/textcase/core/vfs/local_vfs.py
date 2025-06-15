@@ -63,14 +63,17 @@ class LocalVFS(ServiceVFSProtocol):
         Returns:
             Tuple with VFS service instance and remaining path
         """
-        # Convert absolute path to relative path if needed
+        # Store original path for processing
+        original_path = path
+        
+        # Convert relative path to absolute path relative to mount_point
         if not path.is_absolute():
             # 相对路径，直接拼接
-            path = self._mount_point.joinpath(path)
+            path = self._mount_point / path
         
         # 仍然需要检查，避免访问 vfs 之外
         try:
-            path = path.relative_to(self._mount_point)
+            relative_path = path.relative_to(self._mount_point)
         except ValueError:
             # Path is outside mount_point, cannot resolve
             raise ValueError(f"Path {path} is outside VFS mount_point {self._mount_point}")
@@ -81,20 +84,20 @@ class LocalVFS(ServiceVFSProtocol):
         
         # 注意：mount_point_str 是 self._mount_point 的相对路径
         for mount_point_str in self._mounts:
-            mount_point_path = self._mount_point.joinpath(mount_point_str)
+            mount_point_path = PurePosixPath(mount_point_str)
             
-            # Check if the path starts with this mount point
+            # Check if the relative path starts with this mount point
             try:
-                # Use relative_to to check if path is under mount_point_path
-                remaining = path.relative_to(mount_point_path)
+                # Use relative_to to check if relative_path is under mount_point_path
+                remaining = relative_path.relative_to(mount_point_path)
                 # 不需要计算 best 了，因为如果 relative_to 成立，则 一定在当前的 vfs 下
                 vfs = self._mounts[mount_point_str]
                 return vfs.resolve_path(remaining)     # 跳出循环
             except ValueError:
-                # path is not under mount_point_path, continue
+                # relative_path is not under mount_point_path, continue
                 continue
         # No mount point found, use this VFS
-        return self, path
+        return self, relative_path
     
         
     def to_vfs_path(self, local_path: Union[str, Path]) -> Optional[PurePosixPath]:

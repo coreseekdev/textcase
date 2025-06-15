@@ -49,7 +49,7 @@ def cli(ctx: click.Context, project: str, config: Optional[str], verbose: int):
     ctx.obj['project_path'] = project_path
     
     # Create TextCase factory with optional config file
-    textcase_factory = TextCaseFactory(config_file=config)
+    textcase_factory: TextCaseFactory = TextCaseFactory(config_file=config)
     ctx.obj['textcase_factory'] = textcase_factory
     
     # Special handling for 'create' command - don't require valid project
@@ -80,9 +80,9 @@ def cli(ctx: click.Context, project: str, config: Optional[str], verbose: int):
             click.echo("Error: Could not find a valid TextCase project.", err=True)
             click.echo("Run 'textcase create' to create a new project.")
         
-        # Allow command to continue - it will handle the missing TextCase instance
+        # Exit for all commands except 'create'
         if ctx.invoked_subcommand != 'create':
-            ctx.obj['textcase'] = None
+            sys.exit(1)
 
 
 # Register commands

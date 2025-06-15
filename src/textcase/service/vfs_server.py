@@ -367,6 +367,49 @@ class VFSServer:
             return result
         except Exception as e:
             raise self._handle_exception(e)
+    
+    def mkdir(self, path: str, parents: bool = False, exist_ok: bool = False) -> bool:
+        """Create a directory.
+        
+        Args:
+            path: Directory path to create
+            parents: Create parent directories if they don't exist
+            exist_ok: Don't raise error if directory already exists
+            
+        Returns:
+            Success status
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.mkdir(posix_path, parents, exist_ok)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def remove(self, path: str) -> bool:
+        """Remove a file or directory.
+        
+        Args:
+            path: Path to remove
+            
+        Returns:
+            Success status
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.remove(posix_path)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def mount_point(self) -> str:
+        """Get the mount point of this VFS.
+        
+        Returns:
+            Mount point path as string
+        """
+        try:
+            return str(self._vfs.mount_point())
+        except Exception as e:
+            raise self._handle_exception(e)
 
 def create_vfs_service(service_name:str, service_registry: ServiceRegistry) -> VFSServer:
     """Create a VFS service instance.

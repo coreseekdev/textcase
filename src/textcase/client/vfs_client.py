@@ -120,6 +120,15 @@ class VFSClient:
         """
         return self._handle_rpc_exception(self.client.readonly)
     
+    def mount_point(self) -> PurePosixPath:
+        """Get the root path of the VFS service.
+        
+        Returns:
+            Root path as PurePosixPath
+        """
+        result = self._handle_rpc_exception(self.client.mount_point)
+        return PurePosixPath(result)
+    
     def info(self, path: Union[str, PurePosixPath]) -> Dict[str, Any]:
         """Get information about a path.
         

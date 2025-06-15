@@ -99,17 +99,11 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
                 path = Path(path).as_posix()
                 path = PurePosixPath(path)
             
-            # Make path relative to git repo root if it's absolute
+            # collection_path 应该是 vfs 的 path
             if path.is_absolute():
-                try:
-                    # 确保git_repo_root也是PurePosixPath
-                    git_repo_root_posix = PurePosixPath(Path(self._git_repo_root).as_posix())
-                    collection_path = path.relative_to(git_repo_root_posix)
-                except ValueError:
-                    # 如果无法相对化，则使用路径名称作为相对路径
-                    collection_path = self._git_repo_root / path.name
+                collection_path = path
             else:
-                collection_path = self._git_repo_root / path
+                collection_path = self._vfs.mount_point().joinpath(path)
         
         # Create collection instance
         parent_collection = self.get_collection(parent) if parent else None
