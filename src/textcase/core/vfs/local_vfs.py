@@ -5,7 +5,7 @@ This module provides a local file system implementation of the VFS service proto
 
 from abc import ABC, abstractmethod
 from pathlib import Path, PurePosixPath
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Union, Any
 import os
 import uuid
 from datetime import datetime
@@ -27,7 +27,8 @@ class LocalVFS(ServiceVFSProtocol):
         """
         self.root_path = root_path.absolute()
         self._name = f"local:{self.root_path.as_posix()}" if name is None else name
-        self._mount_point = mount_point
+        # Store mount_point as provided (PurePosixPath doesn't have absolute() method)
+        self._mount_point: PurePosixPath = mount_point
         # Dictionary to store mount points: path -> VFS instance
         self._mounts: Dict[str, ServiceVFSProtocol] = {}
         # Dictionary to store edit sessions
@@ -49,6 +50,7 @@ class LocalVFS(ServiceVFSProtocol):
         Returns:
             Root path
         """
+        assert self._mount_point.is_absolute()
         return self._mount_point
 
     # Path resolution methods
@@ -62,44 +64,94 @@ class LocalVFS(ServiceVFSProtocol):
             Tuple with VFS service instance and remaining path
         """
         # Convert absolute path to relative path if needed
-        if path.is_absolute():
-            try:
-                path = path.relative_to(self._mount_point)
-            except ValueError:
-                # Path is outside mount_point, cannot resolve
-                raise ValueError(f"Path {path} is outside VFS mount_point {self._mount_point}")
+        if not path.is_absolute():
+            # 相对路径，直接拼接
+            path = self._mount_point.joinpath(path)
         
+        # 仍然需要检查，避免访问 vfs 之外
+        try:
+            path = path.relative_to(self._mount_point)
+        except ValueError:
+            # Path is outside mount_point, cannot resolve
+            raise ValueError(f"Path {path} is outside VFS mount_point {self._mount_point}")
+            
         # Find the longest matching mount point by comparing path parts
         best_mount_path = None
         best_mount_parts_count = 0
         
+        # 注意：mount_point_str 是 self._mount_point 的相对路径
         for mount_point_str in self._mounts:
-            mount_point_path = PurePosixPath(mount_point_str)
+            mount_point_path = self._mount_point.joinpath(mount_point_str)
             
             # Check if the path starts with this mount point
             try:
                 # Use relative_to to check if path is under mount_point_path
                 remaining = path.relative_to(mount_point_path)
-                # If we get here, path is under mount_point_path
-                mount_parts_count = len(mount_point_path.parts)
-                if mount_parts_count > best_mount_parts_count:
-                    best_mount_path = mount_point_path
-                    best_mount_parts_count = mount_parts_count
+                # 不需要计算 best 了，因为如果 relative_to 成立，则 一定在当前的 vfs 下
+                vfs = self._mounts[mount_point_str]
+                return vfs.resolve_path(remaining)     # 跳出循环
             except ValueError:
                 # path is not under mount_point_path, continue
                 continue
-        
-        if best_mount_path:
-            vfs = self._mounts[best_mount_path.as_posix()]
-            # Calculate remaining path
-            remaining_path = path.relative_to(best_mount_path)
-            # 如果后续没有文件挂载，返回  vfs, remaining_path
-            # 如果有其他文件挂载，进一步解析（递归）
-            return vfs.resolve_path(remaining_path)
-        
         # No mount point found, use this VFS
         return self, path
     
+        
+    def to_vfs_path(self, local_path: Union[str, Path]) -> Optional[PurePosixPath]:
+        """Convert a local file system path to a VFS path if possible.
+        
+        This method attempts to convert a path from the local file system
+        to its equivalent path in the VFS. It handles mounted VFS instances
+        by checking if the local path belongs to any mounted VFS and delegating
+        the conversion if necessary.
+        
+        Args:
+            local_path: Local file system path to convert
+            
+        Returns:
+            Equivalent VFS path as PurePosixPath if conversion is possible,
+            None if the path cannot be mapped to this VFS
+            
+        Raises:
+            ValueError: If the path format is invalid
+        """
+
+        # 转为标准 Path
+        local_path = Path(local_path) if isinstance(local_path, str) else local_path
+        
+        # 检查路径是否为绝对路径
+        if not local_path.is_absolute():
+            raise ValueError("Path must be absolute")
+        
+        # 检查路径是否在当前VFS的挂载点下
+        if local_path.is_relative_to(self.root_path):
+            # 在当前 root_path 下
+            try:
+                rel_path = local_path.relative_to(self.root_path)
+                # 1. 得到 rel_path 后，需要检查是否在 mount point 下，如果在，则需要转 mounted vfs 处理
+                for mount_point_str in self._mounts:
+                    mount_point_path = self._mount_point.joinpath(mount_point_str)
+                    if mount_point_path in rel_path.parents:
+                        # 当前的相对路径 rel_path 被 mounted vfs 覆盖，需要转由 mount vfs 处理
+                        vfs = self._mounts[mount_point_str]
+                        return vfs.to_vfs_path(rel_path)
+                # 2. 不在 mount point 下， 则返回 rel_path
+                return self.mount_point().joinpath(rel_path)
+            except ValueError:
+                # 不是当前 root_path 的子路径， 需要进一步询问 mount poing
+                pass 
+        
+        # local_path 不在 root_path 下， 则需要进一步询问 mount point
+        for mount_point_str in self._mounts:
+            vfs = self._mounts[mount_point_str]
+            vfs_path = vfs.to_vfs_path(local_path)
+            if vfs_path is not None:
+                # 找到匹配的路径，返回
+                return vfs_path
+                        
+        # 如果没有找到匹配的路径，返回None
+        return None
+ 
     # Mount management
     def mount(self, path: PurePosixPath, vfs: ServiceVFSProtocol) -> Tuple[bool, str]:
         """Mount a VFS at the given path.
@@ -112,19 +164,32 @@ class LocalVFS(ServiceVFSProtocol):
             Success status and message
         """
         # Convert to relative path based on mount_point
-        if path.is_absolute():
-            # Check if absolute path is within mount_point
-            try:
-                rel_path = path.relative_to(self._mount_point)
-            except ValueError:
-                return False, f"Mount point {path} is outside VFS mount_point {self._mount_point}"
-        else:
-            rel_path = path
+        if not path.is_absolute():
+            # 相对路径，需要转换为绝对路径
+            path = self.mount_point.joinpath(path)
+    
+        # Check if absolute path is within mount_point
+        try:
+            rel_path = path.relative_to(self._mount_point)
+        except ValueError:
+            return False, f"Mount point {path} is outside VFS mount_point {self._mount_point}"
         
         mount_point_str = rel_path.as_posix()
         if mount_point_str in self._mounts:
             return False, f"Mount point {mount_point_str} already exists"
         
+        # 进一步的，需要检查 mount_point_ptr 整个路径上任何一个 sub path 不是 mount point 
+        # 并且，当前的 mount_point_ptr 也不是已经存在的 mount_point 的 prefix
+        # 例如，已经存在 /a/b/c ，不能再挂载 /a/b/c/d
+        for sub_path in rel_path.parents:
+            if sub_path.as_posix() in self._mounts:
+                return False, f"Mount point {mount_point_str} is a sub path of existing mount point {sub_path.as_posix()}"
+            
+        # 检查当前路径是否是其他已挂载路径的子路径
+        for existing_mount in self._mounts:
+            if existing_mount.startswith(mount_point_str):
+                return False, f"Mount point {existing_mount} is a sub path of existing mount point {existing_mount}"
+
         self._mounts[mount_point_str] = vfs
         return True, f"Mounted {vfs.name()} at {mount_point_str}"
     
@@ -477,55 +542,7 @@ class LocalVFS(ServiceVFSProtocol):
             self.sessions[session_id]['operations'].append(op_id)
         
         return op_id
-    
-    def to_vfs_path(self, local_path: Path) -> Optional[PurePosixPath]:
-        """Convert a local file system path to a VFS path if possible.
-        
-        This method attempts to convert a path from the local file system
-        to its equivalent path in the VFS. It handles mounted VFS instances
-        by checking if the local path belongs to any mounted VFS and delegating
-        the conversion if necessary.
-        
-        Args:
-            local_path: Local file system path to convert
-            
-        Returns:
-            Equivalent VFS path as PurePosixPath if conversion is possible,
-            None if the path cannot be mapped to this VFS
-            
-        Raises:
-            ValueError: If the path format is invalid
-        """
-        # 标准化路径格式
-        try:
-            abs_local_path = os.path.abspath(local_path)
-            abs_root = os.path.abspath(self.root_path)
-        except Exception as e:
-            raise ValueError(f"Invalid path format: {e}")
-        
-        # 检查路径是否在当前VFS的根路径下
-        if abs_local_path.startswith(abs_root):
-            # 计算相对路径
-            rel_path = os.path.relpath(abs_local_path, abs_root)
-            # 转换为POSIX风格路径
-            posix_path = rel_path.replace(os.path.sep, '/')
-            return PurePosixPath(posix_path)
-        
-        # 如果不在当前VFS的根路径下，检查所有挂载的VFS
-        for mount_point, mounted_vfs in self.mounts.items():
-            try:
-                # 尝试在挂载的VFS中查找
-                vfs_path = mounted_vfs.to_vfs_path(local_path)
-                if vfs_path is not None:
-                    # 如果找到了，将挂载点路径与VFS路径组合
-                    return PurePosixPath(mount_point) / vfs_path
-            except Exception:
-                # 忽略挂载VFS中的错误，继续检查其他挂载点
-                continue
-        
-        # 如果没有找到匹配的路径，返回None
-        return None
-    
+   
     def commit(self, op_id: Optional[ServiceVFSProtocol.OperationId] = None, 
                 session_id: Optional[ServiceVFSProtocol.SessionId] = None) -> Dict[str, Any]:
         """Commit patches.

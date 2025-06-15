@@ -34,26 +34,23 @@ __all__ = ['main']
 
 
 @click.group()
-@click.option('-p', '--project', help='Path to the project directory')
-@click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
+@click.option('-p', '--project', default='.', help='Path to the project directory (default: current directory)')
+@click.option('-c', '--config', help='Path to the configuration file')
+@click.option('-v', '--verbose', count=True, help='Enable verbose output (use multiple times for higher verbosity: -v, -vv, -vvv)')
 @click.pass_context
-def cli(ctx: click.Context, project: Optional[str], verbose: bool):
+def cli(ctx: click.Context, project: str, config: Optional[str], verbose: int):
     """TextCase CLI - Manage your TextCase projects."""
     # Initialize context object
     ctx.ensure_object(dict)
     ctx.obj['verbose'] = verbose
     
-    # Determine project path
-    project_path = None
-    if project:
-        project_path = Path(project).resolve()
-    else:
-        # Try to find project in current directory
-        current_dir = Path.cwd()
-        project_path = current_dir
-    
-    # Store project path in context
+    # Resolve project path
+    project_path = Path(project).resolve()
     ctx.obj['project_path'] = project_path
+    
+    # Create TextCase factory with optional config file
+    textcase_factory = TextCaseFactory(config_file=config)
+    ctx.obj['textcase_factory'] = textcase_factory
     
     # Special handling for 'create' command - don't require valid project
     if ctx.invoked_subcommand == 'create':
@@ -63,18 +60,25 @@ def cli(ctx: click.Context, project: Optional[str], verbose: bool):
     
     # For all other commands, ensure we have a valid TextCase instance
     try:
-        # Create TextCase instance
-        textcase = TextCaseFactory().get(str(project_path))
+        # Create TextCase instance using the factory
+        textcase = textcase_factory.get(str(project_path))
         ctx.obj['textcase'] = textcase
         
-        if verbose:
+        if verbose >= 1:
             click.echo(f"Using project at: {textcase.repo_root_path}")
+            if config:
+                click.echo(f"Using config file: {config}")
+            if verbose >= 2:
+                click.echo(f"Verbose level: {verbose}")
     except Exception as e:
-        if verbose:
+        if verbose >= 1:
             click.echo(f"Error initializing TextCase: {e}", err=True)
+            if verbose >= 3:
+                import traceback
+                click.echo(traceback.format_exc(), err=True)
         else:
             click.echo("Error: Could not find a valid TextCase project.", err=True)
-            click.echo("Use --project to specify a project path or run 'textcase create' to create a new project.")
+            click.echo("Run 'textcase create' to create a new project.")
         
         # Allow command to continue - it will handle the missing TextCase instance
         if ctx.invoked_subcommand != 'create':

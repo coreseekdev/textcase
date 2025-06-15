@@ -285,8 +285,88 @@ class VFSServer:
         except Exception as e:
             raise self._handle_exception(e)
     
-    def to_vfs_path(self, str) -> str:
-        return self._vfs.to_vfs_path(str)
+    def to_vfs_path(self, local_path: str) -> Optional[str]:
+        """Convert a local file system path to a VFS path if possible.
+        
+        Args:
+            local_path: Local file system path to convert
+            
+        Returns:
+            Equivalent VFS path as string if conversion is possible,
+            None if the path cannot be mapped to this VFS
+        """
+        try:
+            from pathlib import Path
+            result = self._vfs.to_vfs_path(Path(local_path))
+            return str(result) if result is not None else None
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def resolve_path(self, path: str) -> Tuple[str, str]:
+        """Resolve a path to VFS and remaining path info.
+        
+        Args:
+            path: Path to resolve
+            
+        Returns:
+            Tuple with VFS service name and remaining path as strings
+        """
+        try:
+            posix_path = self._convert_path(path)
+            vfs, remaining_path = self._vfs.resolve_path(posix_path)
+            return (vfs.name(), str(remaining_path))
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def mount(self, path: str, vfs_name: str) -> Tuple[bool, str]:
+        """Mount a VFS at the given path.
+        
+        Args:
+            path: VFS mount point
+            vfs_name: Name of VFS service to mount
+            
+        Returns:
+            Success status and message
+        """
+        try:
+            # Note: This is a simplified implementation
+            # In a real scenario, you'd need to resolve vfs_name to actual VFS instance
+            posix_path = self._convert_path(path)
+            # For now, return not implemented
+            return (False, "Mount operation not implemented in server")
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def unmount(self, path: str) -> bool:
+        """Unmount a VFS at the given path.
+        
+        Args:
+            path: VFS mount point to unmount
+            
+        Returns:
+            Success status
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.unmount(posix_path)
+        except Exception as e:
+            raise self._handle_exception(e)
+    
+    def list_mounts(self) -> Dict[str, str]:
+        """Get list of mount points.
+        
+        Returns:
+            Dictionary of mount points (as strings) and their VFS service names
+        """
+        try:
+            mounts = self._vfs.list_mounts()
+            # Convert to string keys and VFS names
+            result = {}
+            for mount_path, vfs_instance in mounts.items():
+                result[str(mount_path)] = vfs_instance.name()
+            return result
+        except Exception as e:
+            raise self._handle_exception(e)
 
 def create_vfs_service(service_name:str, service_registry: ServiceRegistry) -> VFSServer:
     """Create a VFS service instance.
