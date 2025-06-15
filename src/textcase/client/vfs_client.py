@@ -129,7 +129,11 @@ class VFSClient:
         Returns:
             Path information
         """
-        path_str = str(path) if isinstance(path, PurePosixPath) else path
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
         return self._handle_rpc_exception(self.client.info, path_str)
     
     def list(self, path: Union[str, PurePosixPath], option: Optional[Dict[str, Any]] = None) -> List[Tuple[PurePosixPath, EntryType]]:
@@ -144,7 +148,12 @@ class VFSClient:
         """
         if option is None:
             option = {}
-        path_str = str(path) if isinstance(path, PurePosixPath) else path
+        
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
         
         # Get string tuples from server and convert to proper types
         result = self._handle_rpc_exception(self.client.list, path_str, option)
@@ -159,42 +168,58 @@ class VFSClient:
         return converted_result
     
     def get(self, path: Union[str, PurePosixPath]) -> bytes:
-        """Get file contents.
+        """Get file contents as bytes.
         
         Args:
-            path: File path to read (string or PurePosixPath)
+            path: Path to the file (string or PurePosixPath)
             
         Returns:
             File contents as bytes
         """
-        path_str = str(path) if isinstance(path, PurePosixPath) else path
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
+        
         return self._handle_rpc_exception(self.client.get, path_str)
     
-    def get_text(self, path: Union[str, PurePosixPath], encoding: str = 'utf-8') -> Optional[str]:
+    def get_text(self, path: Union[str, PurePosixPath], encoding: str = 'utf-8') -> str:
         """Get file contents as text.
         
         Args:
-            path: File path to read (string or PurePosixPath)
-            encoding: Text encoding to use
+            path: Path to the file (string or PurePosixPath)
+            encoding: Text encoding (default: utf-8)
             
         Returns:
-            File contents as text, or None if failed
+            File contents as string
         """
-        path_str = str(path) if isinstance(path, PurePosixPath) else path
-        return self._handle_rpc_exception(self.client.get_text, path_str, encoding)
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
+        
+        content = self._handle_rpc_exception(self.client.get, path_str)
+        return content.decode(encoding) if content else ''
     
     def put(self, path: Union[str, PurePosixPath], content: bytes, create_if_missing: bool = False) -> bool:
         """Put file contents.
         
         Args:
-            path: File path to write (string or PurePosixPath)
-            content: File content as bytes
+            path: Path to write to (string or PurePosixPath)
+            content: Content to write
             create_if_missing: Create file if it doesn't exist
             
         Returns:
             Success status
         """
-        path_str = str(path) if isinstance(path, PurePosixPath) else path
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
+        
         return self._handle_rpc_exception(self.client.put, path_str, content, create_if_missing)
     
     def remove(self, path: Union[str, PurePosixPath], force: bool = False) -> bool:
@@ -202,16 +227,17 @@ class VFSClient:
         
         Args:
             path: Path to remove (string or PurePosixPath)
-            force: Force removal (ignore non-existent files)
-            recursive: Remove directories recursively
+            force: Force removal even if non-empty directory
             
         Returns:
             Success status
-            
-        Raises:
-            VFSClientException: If removal fails
         """
-        path_str = str(path) if isinstance(path, PurePosixPath) else path
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
+        
         return self._handle_rpc_exception(self.client.remove, path_str, force)
     
     def mkdir(self, path: Union[str, PurePosixPath], parents: bool = False, exist_ok: bool = False) -> bool:
@@ -224,28 +250,34 @@ class VFSClient:
             
         Returns:
             Success status
-            
-        Raises:
-            VFSClientException: If directory creation fails
         """
-        path_str = str(path) if isinstance(path, PurePosixPath) else path
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
+        
         return self._handle_rpc_exception(self.client.mkdir, path_str, parents, exist_ok)
     
-    def patch(self, path: Union[str, PurePosixPath], range_tuple: Tuple[int, int], content: bytes, 
-              session_id: Optional[str] = None) -> str:
-        """Apply a patch to a file.
+    def patch(self, path: Union[str, PurePosixPath], range_tuple: Tuple[int, int], content: bytes, create_if_missing: bool = False) -> bool:
+        """Patch a file with new content in a specific range.
         
         Args:
-            path: File path to patch (string or PurePosixPath)
-            range_tuple: (start, end) position tuple
-            content: Replacement content
-            session_id: Optional session ID
+            path: Path to the file to patch (string or PurePosixPath)
+            range_tuple: (start, end) byte range to replace
+            content: New content to insert
+            create_if_missing: Create file if it doesn't exist
             
         Returns:
-            Operation ID
+            Success status
         """
-        path_str = str(path) if isinstance(path, PurePosixPath) else path
-        return self._handle_rpc_exception(self.client.patch, path_str, range_tuple, content, session_id)
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
+        
+        return self._handle_rpc_exception(self.client.patch, path_str, range_tuple, content, create_if_missing)
     
     def commit(self, message: str, op_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Commit patches.

@@ -76,11 +76,14 @@ class TextCaseFactory:
         # Start services to ensure VFS is available
         instance.start_services()
         
+        # 将Windows风格路径转换为POSIX风格
+        abs_path_posix = Path(abs_path).as_posix()
+        
         # Create root collection at the specified path
         instance.resource_manager.create_collection(
             name=collection_name,
             parent=None,
-            path=abs_path
+            path=abs_path_posix
         )
         
         # Cache the instance

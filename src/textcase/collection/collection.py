@@ -523,6 +523,7 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             The full path to the item's file
         """
         filename = self.config.get_item_filename(name)
+        # 确保使用PurePosixPath处理路径
         return self._path / filename
     
     def get_item_tags(self, name: str) -> Set[str]:

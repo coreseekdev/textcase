@@ -93,13 +93,20 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
                 # CASE stands for Computer-aid Software Engineering
                 collection_path = self._git_repo_root / 'case' / name
         else:
+            # 确保路径是PurePosixPath类型
             if isinstance(path, str):
+                # 将Windows风格路径转换为POSIX风格
+                path = Path(path).as_posix()
                 path = PurePosixPath(path)
+            
             # Make path relative to git repo root if it's absolute
             if path.is_absolute():
                 try:
-                    collection_path = path.relative_to(self._git_repo_root)
+                    # 确保git_repo_root也是PurePosixPath
+                    git_repo_root_posix = PurePosixPath(Path(self._git_repo_root).as_posix())
+                    collection_path = path.relative_to(git_repo_root_posix)
                 except ValueError:
+                    # 如果无法相对化，则使用路径名称作为相对路径
                     collection_path = self._git_repo_root / path.name
             else:
                 collection_path = self._git_repo_root / path
