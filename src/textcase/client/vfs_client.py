@@ -335,8 +335,9 @@ class VFSClient:
             Equivalent VFS path as PurePosixPath if conversion is possible,
             None if the path cannot be mapped to this VFS
         """
+        path_str = local_path.as_posix()
         try:
-            result = self._handle_rpc_exception(self.client.to_vfs_path, local_path)
+            result = self._handle_rpc_exception(self.client.to_vfs_path, path_str)
             if result is not None:
                 return PurePosixPath(result)
             return None

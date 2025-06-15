@@ -284,6 +284,9 @@ class VFSServer:
             return self._vfs.list_sessions()
         except Exception as e:
             raise self._handle_exception(e)
+    
+    def to_vfs_path(self, str) -> str:
+        return self._vfs.to_vfs_path(str)
 
 def create_vfs_service(service_name:str, service_registry: ServiceRegistry) -> VFSServer:
     """Create a VFS service instance.

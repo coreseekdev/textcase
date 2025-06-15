@@ -5,7 +5,7 @@ to access git repositories and provides read-only access to git trees.
 """
 
 from pathlib import PurePosixPath, Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Union, Any
 import os
 import time
 
@@ -51,7 +51,7 @@ class GitVFS(ServiceVFSProtocol):
         """
         return self._mount_point
     
-    def to_vfs_path(self, local_path: Path) -> Optional[PurePosixPath]:
+    def to_vfs_path(self, local_path: Union[str, Path]) -> Optional[PurePosixPath]:
         # Git VFS is not directly mapped to local file system paths
         return None
 

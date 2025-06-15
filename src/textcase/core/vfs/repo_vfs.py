@@ -5,7 +5,7 @@ local file system access with git repository functionality.
 """
 
 from pathlib import PurePosixPath, Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Union, Any
 import os
 
 from .local_vfs import LocalVFS
@@ -57,7 +57,7 @@ class RepoVFS(ServiceVFSProtocol):
         """Get the root path of the VFS service."""
         return self._mount_point
 
-    def to_vfs_path(self, local_path: Path) -> Optional[PurePosixPath]:
+    def to_vfs_path(self, local_path: Union[str, Path]) -> Optional[PurePosixPath]:
         """Convert a local file system path to a VFS path if possible.
         
         This method attempts to convert a path from the local file system

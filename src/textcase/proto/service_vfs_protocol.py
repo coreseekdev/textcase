@@ -4,7 +4,7 @@ This module defines the protocol interface for VFS services.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any, Protocol, BinaryIO, Tuple
+from typing import Dict, List, Optional, Any, Protocol, BinaryIO, Tuple, Union
 from pathlib import PurePosixPath, Path
 from enum import Enum
 
@@ -57,7 +57,7 @@ class ServiceVFSProtocol(ABC):
         ...
     
     @abstractmethod
-    def to_vfs_path(self, local_path: Path) -> Optional[PurePosixPath]:
+    def to_vfs_path(self, local_path: Union[str, Path]) -> Optional[PurePosixPath]:
         """Convert a local file system path to a VFS path if possible.
         
         This method attempts to convert a path from the local file system
