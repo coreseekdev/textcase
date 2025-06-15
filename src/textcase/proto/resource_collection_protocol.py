@@ -289,6 +289,15 @@ class ResourceCollection(Protocol[T]):
         """Check if a tag exists in this collection."""
         ...
 
+    @abstractmethod
+    def add_tag(self, tag: str, description: Optional[str] = None) -> None:
+        """Add a tag to this collection."""
+        ...
+    @abstractmethod
+    def remove_tag(self, tag: str) -> bool:
+        """Remove a tag from this collection."""
+        ...
+
     # Iteration support
     @abstractmethod
     def iter_items(self) -> Iterator[ResourceItem[T]]:

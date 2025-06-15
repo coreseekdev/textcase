@@ -263,7 +263,7 @@ class CollectionTagManager:
         # Update config
         config = self._collection.config
         config.tags[tag] = description
-        self._collection._save_config()
+        self._collection._save_config() # FIXME: 需要考虑多次修改、添加
         
         # Create tag manager and ensure file exists
         tag_manager = self.get_tag_manager(tag)
@@ -290,7 +290,7 @@ class CollectionTagManager:
         
         # Remove from config
         del config.tags[tag]
-        self._collection._save_config()
+        self._collection._save_config()   # FIXME: 考虑多次添加，删除，保存配置的调用外置
         
         # Delete tag file
         tag_manager = self.get_tag_manager(tag)

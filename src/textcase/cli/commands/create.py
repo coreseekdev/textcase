@@ -29,9 +29,10 @@ from textcase.cli.utils import debug_echo
 @click.argument('collection_path', type=click.Path(path_type=Path))
 @click.option('--parent', help='Parent collection name (required for subcollections)')
 @click.option('--tag', 'tags', multiple=True, help='Collection tag in format tag_name=description or just tag_name (can be used multiple times)')
+@click.option('--force', is_flag=True, help='Force creation even if collection already exists')
 @click.pass_context
 def create(ctx: click.Context, collection_prefix: str, collection_path: Path, 
-         parent: Optional[str] = None, tags: List[str] = None):
+         parent: Optional[str] = None, tags: List[str] = None, force: bool = False):
     """
     Create a new collection or subcollection.
     
@@ -41,6 +42,7 @@ def create(ctx: click.Context, collection_prefix: str, collection_path: Path,
     Example usage:
       textcase create DOC ./docs/
       textcase create CODE ./src/ --parent docs --tag priority=high --tag status=active
+      textcase create DOC ./docs/ --force  # Force creation even if collection exists
     """
     # Get TextCase factory from context
     textcase_factory: TextCaseFactory = ctx.obj.get('textcase_factory')
@@ -78,7 +80,7 @@ def create(ctx: click.Context, collection_prefix: str, collection_path: Path,
         # Check if collection already exists
         try:
             existing_collection = resource_manager.get_collection(collection_prefix)
-            if existing_collection:
+            if existing_collection and not force:
                 click.echo(f"Error: Collection '{collection_prefix}' already exists at {existing_collection.path}", err=True)
                 ctx.exit(1)
         except Exception:
@@ -109,14 +111,14 @@ def create(ctx: click.Context, collection_prefix: str, collection_path: Path,
         collection = resource_manager.create_collection(
             name=collection_prefix,
             path=str(collection_path),
-            parent=parent
+            parent=parent,
+            force=force
         )
         
         # Add tags to the collection if provided
-        if tags:
-            # TODO: Implement adding tags to collection
-            for tag_str in tags:
-                tag_name, tag_description = tag_str.split('=', 1) if '=' in tag_str else (tag_str, '')
-                collection. add_tag(tag_name, tag_description)
+        if parsed_tags:
+            for tag_name, tag_description in parsed_tags.items():
+                collection.tag_manager.add_tag(tag_name, tag_description)
+            # collection._save_config() # 不能直接调用，接口上无此方法
+            pass
         
-        # TODO: 添加 collection 到 resource_manager

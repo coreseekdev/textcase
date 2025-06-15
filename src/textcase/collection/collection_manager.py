@@ -63,7 +63,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         name: str,
         parent: Optional[str] = None,
         path: Optional[Union[PurePosixPath, str]] = None,
-        tags: Optional[Dict[str, str]] = None
+        force: bool = False
     ) -> ResourceCollection[T]:
         """Create a new collection.
         
@@ -71,6 +71,8 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             name: Unique name for the collection
             parent: Optional parent collection name
             path: Optional custom path (relative to git repo root)
+            tags: Optional tags for the collection
+            force: If True, force creation even if collection already exists
             
         Returns:
             The created ResourceCollection
@@ -78,7 +80,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         Raises:
             ValueError: If a collection with the same name already exists
         """
-        if name in self._hierarchy:
+        if name in self._hierarchy and not force:
             raise ValueError(f"Collection '{name}' already exists")
         
         # Validate parent exists if specified
@@ -87,7 +89,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         
         if not parent:
             # 仅 root collection 可以没有 parent
-            if self._root_collection_name:
+            if self._root_collection_name and not force:
                 raise ValueError(f"Root collection '{self._root_collection_name}' already exists")
 
         # Determine collection path
@@ -102,18 +104,22 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             # 确保路径是PurePosixPath类型
             if isinstance(path, str):
                 # 将Windows风格路径转换为POSIX风格
-                path = Path(path).as_posix()
-                path = PurePosixPath(path)
+                path = Path(path).absolute()
             
             # collection_path 应该是 vfs 的 path
             if path.is_absolute():
-                collection_path = path
+                # TODO: 需要验证绝对路径创建 collection 的情况
+                collection_path = self._vfs.to_vfs_path(path)
             else:
                 collection_path = self._vfs.mount_point().joinpath(path)
         
         # Create collection instance
         parent_collection = self.get_collection(parent) if parent else None
-        collection = ResourceCollectionImpl.create(name, collection_path, self._vfs, parent_collection)
+        collection = ResourceCollectionImpl.create(name, collection_path, self._vfs, parent_collection, force=force)
+
+        if collection.name in self._hierarchy and force:
+            # 已存在，直接返回
+            return collection
 
         self.add_collection(collection, parent)
         return collection
@@ -170,7 +176,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         parent_name = self.get_parent_collection_name(name)
         if not parent_name:
             return None
-            
+        
         return self.get_collection(parent_name)
     
     def add_collection(self, collection: ResourceCollection[T], parent: Optional[str] = None) -> None:
@@ -214,7 +220,8 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         
         # Update parent's children list
         if parent:
-            self._hierarchy[parent]['children'].append(name)
+            if name not in self._hierarchy[parent]['children']:
+                self._hierarchy[parent]['children'].append(name)
         else:
             self._root_collection_name = name
 

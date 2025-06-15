@@ -32,7 +32,7 @@ class TextCaseFactory:
     
     _instance_cache = WeakValueDictionary()
     
-    def create(self, file_path: Union[str, Path], collection_name: str = "ROOT") -> 'TextCase':
+    def create(self, file_path: Union[str, Path], collection_name: str = "ROOT", force: bool = False) -> 'TextCase':
         """Create a TextCase instance from scratch.
         
         This method:
@@ -43,6 +43,7 @@ class TextCaseFactory:
         Args:
             file_path: Path where the root collection will be created
             collection_name: Name for the root collection (default: "ROOT")
+            force: If True, force creation even if collection already exists
             
         Returns:
             Configured TextCase instance with initialized root collection
@@ -82,7 +83,8 @@ class TextCaseFactory:
         instance.resource_manager.create_collection(
             name=collection_name,
             parent=None,
-            path=vfs_path
+            path=vfs_path,
+            force=force
         )
         
         # Cache the instance
