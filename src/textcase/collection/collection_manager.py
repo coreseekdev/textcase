@@ -62,7 +62,8 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         self,
         name: str,
         parent: Optional[str] = None,
-        path: Optional[Union[PurePosixPath, str]] = None
+        path: Optional[Union[PurePosixPath, str]] = None,
+        tags: Optional[Dict[str, str]] = None
     ) -> ResourceCollection[T]:
         """Create a new collection.
         
@@ -84,6 +85,11 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         if parent and parent not in self._hierarchy:
             raise ValueError(f"Parent collection '{parent}' does not exist")
         
+        if not parent:
+            # 仅 root collection 可以没有 parent
+            if self._root_collection_name:
+                raise ValueError(f"Root collection '{self._root_collection_name}' already exists")
+
         # Determine collection path
         if path is None:
             if parent:

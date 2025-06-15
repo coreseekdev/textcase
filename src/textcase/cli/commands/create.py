@@ -58,8 +58,8 @@ def create(ctx: click.Context, collection_prefix: str, collection_path: Path,
             return
         except Exception as e:
             click.echo(f"Error: Failed to create TextCase instance: {e}", err=True)
-            import traceback
-            print(traceback.format_exc())
+            # import traceback
+            # print(traceback.format_exc())
             ctx.exit(1)
     else:
         # parent 存在的情况， 要求上下文中已经存在
@@ -95,16 +95,28 @@ def create(ctx: click.Context, collection_prefix: str, collection_path: Path,
             click.echo(f"Error: Parent collection '{parent}' not found: {e}", err=True)
             ctx.exit(1)
         
-         # Create the collection
+        # Parse tags
+        parsed_tags = {}
+        if tags:
+            for tag_str in tags:
+                if '=' in tag_str:
+                    tag_name, tag_description = tag_str.split('=', 1)
+                else:
+                    tag_name, tag_description = tag_str, ''
+                parsed_tags[tag_name] = tag_description
+        
+        # Create the collection
         collection = resource_manager.create_collection(
             name=collection_prefix,
             path=str(collection_path),
-            parent_name=parent
+            parent=parent
         )
         
         # Add tags to the collection if provided
-        if tag_dict:
+        if tags:
             # TODO: Implement adding tags to collection
-            pass
+            for tag_str in tags:
+                tag_name, tag_description = tag_str.split('=', 1) if '=' in tag_str else (tag_str, '')
+                collection. add_tag(tag_name, tag_description)
         
         # TODO: 添加 collection 到 resource_manager

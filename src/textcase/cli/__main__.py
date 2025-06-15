@@ -52,10 +52,30 @@ def cli(ctx: click.Context, project: str, config: Optional[str], verbose: int):
     textcase_factory: TextCaseFactory = TextCaseFactory(config_file=config)
     ctx.obj['textcase_factory'] = textcase_factory
     
-    # Special handling for 'create' command - don't require valid project
+    # Special handling for 'create' command - don't require valid project unless --parent is used
     if ctx.invoked_subcommand == 'create':
-        # For 'create' command, we still need a TextCase instance but we'll create it on demand
-        # when the command is executed, using the path provided in the command arguments
+        # Check if --parent option is being used by examining sys.argv
+        # If --parent is used, we need an existing TextCase instance
+        if '--parent' in sys.argv:
+            # For create with --parent, we need an existing TextCase instance
+            try:
+                textcase = textcase_factory.get(str(project_path))
+                ctx.obj['textcase'] = textcase
+                
+                if verbose >= 1:
+                    click.echo(f"Using project at: {textcase.repo_root_path}")
+                    if config:
+                        click.echo(f"Using config file: {config}")
+            except Exception as e:
+                if verbose >= 1:
+                    click.echo(f"Error initializing TextCase: {e}", err=True)
+                    if verbose >= 3:
+                        import traceback
+                        click.echo(traceback.format_exc(), err=True)
+                else:
+                    click.echo("Error: Could not find a valid TextCase project. When using --parent, you must run the command from within an existing TextCase project.", err=True)
+                ctx.exit(1)
+        # For create without --parent, we'll create the TextCase instance on demand
         return
     
     # For all other commands, ensure we have a valid TextCase instance

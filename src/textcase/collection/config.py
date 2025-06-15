@@ -46,7 +46,6 @@ class CollectionConfig:
         """Initialize a collection configuration with specified parameters.
         
         Args:
-            name: The name of the collection (defaults to directory name if empty)
             prefix: The prefix for items in this collection
             num: Number of digits for item numbering
             sep: Separator between prefix and number
@@ -93,11 +92,12 @@ class CollectionConfig:
             )
     
     @classmethod
-    def _create_default_config(cls, prefix:str) -> 'CollectionConfig':
+    def _create_default_config(cls, prefix: str, tags: Dict[str, str] = None) -> 'CollectionConfig':
         """Create a default configuration for a new collection.
         
         Args:
-            prefix: The prefix of the collection (defaults to directory name if empty)
+            prefix: The prefix of the collection
+            tags: Optional tags for the collection
             
         Returns:
             A new CollectionConfig with default values
@@ -109,7 +109,7 @@ class CollectionConfig:
             num=3,
             sep='',
             suffix='.md',
-            tags={},
+            tags=tags or {},
             settings={}
         )
     

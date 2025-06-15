@@ -545,17 +545,15 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
                 self._config = CollectionConfig.loads(config_path, content)
             else:
                 # Create default config if file is empty
-                self._config = CollectionConfig._create_default_config(self._name)
+                self._config = CollectionConfig._create_default_config(self._name.upper()[:3])
                 self._save_config()
         except FileNotFoundError:
             # Create default config if file doesn't exist
-            self._config = CollectionConfig._create_default_config(self._name)
+            self._config = CollectionConfig._create_default_config(self._name.upper()[:3])
             self._save_config()
         
         # Update name if it differs
-        if self._config.name != self._name:
-            self._config.name = self._name
-            self._save_config()
+        self._save_config()
     
     def _save_config(self) -> None:
         """Save collection configuration to .textcase.yml."""
