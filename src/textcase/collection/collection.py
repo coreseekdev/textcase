@@ -12,6 +12,8 @@ from ..proto.resource_collection_protocol import ResourceCollection, ResourceIte
 from .config import CollectionConfig
 from .item import ResourceItemImpl
 from .collection_tag import CollectionTagManager, TagManager
+from .item_name_generator import NumericItemNameGenerator
+from ..proto.service_vfs_protocol import EntryType
 
 T = TypeVar('T')
 
@@ -57,6 +59,9 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         self._items_cache: Dict[str, ResourceItemImpl[T]] = {}
         self._collections_cache: Dict[str, 'ResourceCollectionImpl[T]'] = {}
         self._tag_manager: Optional[CollectionTagManager] = None
+        
+        # Initialize item name generator
+        self._item_name_generator: Optional[NumericItemNameGenerator] = None
     
     @classmethod
     def create(
@@ -213,6 +218,15 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             self._tag_manager = CollectionTagManager(self, self._vfs)
         return self._tag_manager
     
+    @property
+    def item_name_generator(self) -> NumericItemNameGenerator:
+        """Get the item name generator for this collection."""
+        if self._item_name_generator is None:
+            self._item_name_generator = NumericItemNameGenerator(
+                self.config.num
+            )
+        return self._item_name_generator
+    
     def add_item(self, name: str, data: Optional[T] = None) -> ResourceItem[T]:
         """Add a new item to this collection.
         
@@ -302,17 +316,24 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             items = self._vfs.list(self._path)
             item_names = []
             
-            for item_info in items:
+            for item_name, item_type in items:
                 # Skip directories and special files
-                if item_info.get('type') == 'directory':
+                if item_type == EntryType.DIR:
                     continue
                 
-                filename = item_info.get('name', '')
-                if filename.startswith('.') or filename.endswith('.txt'):
+                filename = str(item_name)
+                if filename.startswith('.') or filename.endswith(TagManager.TAG_FILE_EXTENSION):
                     continue  # Skip config files and tag files
                 
-                # Parse item name from filename
-                item_name = self.config.parse_item_name(filename)
+                # Check file sufix
+                if not filename.endswith(self.config.suffix):
+                    continue
+                
+                if self.config.prefix:
+                    if not filename.startswith(self.config.prefix+self.config.sep):
+                        continue
+                    
+                _, item_name = self.config.parse_item_name(filename)
                 if item_name:
                     item_names.append(item_name)
             
@@ -331,6 +352,34 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
             item = self.get_item(name)
             if item:
                 yield item
+    
+    def get_next_item_name(self, prefix: str = '') -> str:
+        """Generate the next available item name with numeric numbering.
+        
+        This method finds the maximum numeric value among existing items that match
+        the given prefix pattern and returns the next sequential number.
+        
+        Args:
+            prefix: Optional prefix to filter items. If empty, considers all numeric items.
+                   For example, if collection has [REQ-001.md, REQ-001.2.md] and prefix='001.',
+                   the next item would be '001.3'. If prefix='', next item would be '2' or '002'.
+        
+        Returns:
+            The next available item name as a string
+            
+        Examples:
+            - Collection has items: ['001', '002', '005'] -> get_next_item_name() returns '006'
+            - Collection has items: ['001.1', '001.2', '002'] -> get_next_item_name('001.') returns '001.3'
+            - Empty collection -> get_next_item_name() returns '001'
+        """
+        
+        # Get item names (these are parsed names, not filenames)
+        # 如果 prefix 为空，则根据 config 自动计算 prefix
+        if not prefix:
+            prefix = self.config.prefix + self.config.sep
+            
+        item_names = self.list_items()
+        return self.item_name_generator.get_next_item_name(item_names, prefix)
     
     def add_tag(self, tag: str, description: Optional[str] = None) -> None:
         """Add a tag to this collection.
@@ -504,20 +553,7 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         Returns:
             The next available item name
         """
-        config = self.config
-        actual_prefix = prefix or config.prefix
-        
-        # Find the highest existing number
-        max_num = 0
-        for name in self.list_items():
-            if name.startswith(actual_prefix):
-                number_part = name[len(actual_prefix):]
-                if number_part.isdigit():
-                    max_num = max(max_num, int(number_part))
-        
-        # Return next number
-        next_num = max_num + 1
-        return f"{actual_prefix}{next_num}"
+        return self.item_name_generator.get_next_item_name(self.list_items(), prefix)
     
     def _ensure_directory_exists(self) -> None:
         """Ensure the collection directory exists."""

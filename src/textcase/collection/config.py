@@ -188,4 +188,4 @@ class CollectionConfig:
             else:
                 return 0, number_part       # 隐含的，number 不能是 0
                 
-        return None
+        return 0, None

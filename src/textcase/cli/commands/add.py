@@ -30,7 +30,7 @@ from textcase.cli.commands.edit import edit_with_editor, get_editor
 def monitor_file_changes(file_path: Path, module, item_id: str, timeout: int = 60) -> None:
     """
     Monitor a file for changes and add it to the module order when changes are detected.
-    
+
     Args:
         file_path: Path to the file to monitor
         module: The module to add the item to
@@ -39,10 +39,10 @@ def monitor_file_changes(file_path: Path, module, item_id: str, timeout: int = 6
     """
     if not file_path.exists():
         return
-        
+
     initial_mtime = file_path.stat().st_mtime
     start_time = time.time()
-    
+
     while time.time() - start_time < timeout:
         try:
             # Check if file exists and has been modified
@@ -61,51 +61,9 @@ def monitor_file_changes(file_path: Path, module, item_id: str, timeout: int = 6
         except Exception:
             # Any error, just continue monitoring
             pass
-            
+
         # Sleep to avoid high CPU usage
         time.sleep(1)
-
-
-def validate_item_id(ctx: click.Context, collection, name: str) -> Tuple[bool, str]:
-    """
-    Validate if the item ID is valid and doesn't already exist.
-    
-    Args:
-        ctx: Click context
-        collection: The collection to check against
-        name: The name to validate
-        
-    Returns:
-        Tuple of (is_valid, formatted_id)
-    """
-    # Get collection settings
-    # TODO: Implement collection settings retrieval
-    prefix = "ITEM"  # Default prefix
-    sep = "-"  # Default separator
-    digits = 3  # Default digits
-    
-    # If name is a number, format it according to collection settings
-    if name.isdigit():
-        # Format with the specified number of digits
-        formatted_id = f"{int(name):0{digits}d}"
-    else:
-        # Use name as is for string names
-        formatted_id = name
-    
-    # Get the configured extension or default to .md
-    extension = ".md"  # Default extension
-    
-    # Check if an item with this ID already exists
-    full_id = f"{prefix}{sep}{formatted_id}"
-    file_path = Path(collection.path) / f"{full_id}{extension}"
-    
-    # Check if file exists
-    if os.path.exists(file_path):
-        click.echo(f"Error: Item with ID '{full_id}' already exists.", err=True)
-        return False, ""
-    
-    return True, formatted_id
-
 
 @click.command()
 @click.option('-n', '--name', help='Specify a custom name or number for the resource item')
@@ -147,42 +105,11 @@ def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, qu
         ctx.exit(1)
     
     debug_echo(ctx, f"Found collection: {collection_name} at {collection.path}")
-    
-    # Determine the item ID
-    item_id = None
-    if name:
-        # Validate user-provided name
-        is_valid, formatted_id = validate_item_id(ctx, collection, name)
-        if not is_valid:
-            ctx.exit(1)
-        item_id = formatted_id
-    else:
-        # Get next available ID from collection
-        try:
-            # Get all existing items and find the maximum numeric ID
-            existing_items = collection.list_items()
-            max_num = 0
-            
-            for item_name in existing_items:
-                # item_name is actually a tuple (num, str) from parse_item_name
-                if isinstance(item_name, tuple) and len(item_name) >= 2:
-                    num_part = item_name[0]  # The numeric part
-                    if num_part > 0:
-                        max_num = max(max_num, num_part)
-                elif isinstance(item_name, str):
-                    # Fallback: try to parse as string
-                    filename = collection.config.generate_filename(item_name)
-                    parsed = collection.config.parse_item_name(filename)
-                    if parsed and parsed[0] > 0:
-                        max_num = max(max_num, parsed[0])
-            
-            # Generate next ID with proper zero-padding
-            next_num = max_num + 1
-            item_id = str(next_num).zfill(collection.config.num)
-            debug_echo(ctx, f"Generated next item ID: {item_id}")
-        except Exception as e:
-            click.echo(f"Error generating item ID: {e}", err=True)
-            ctx.exit(1)
+
+    # Get next available ID from collection using the new interface
+    # Use the collection's get_next_item_name method
+    item_id = collection.get_next_item_name()
+    debug_echo(ctx, f"Generated next item ID: {item_id}")
     
     # Get collection configuration
     config = collection.config

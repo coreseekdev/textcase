@@ -141,7 +141,8 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             return self._collections_cache[name]
             
         # Create and cache collection instance
-        collection_path = self._git_repo_root / PurePosixPath(self._hierarchy[name]['path'])
+        # 配置中的路径为 相对于 vfs root 的相对路径
+        collection_path = PurePosixPath('/').joinpath(self._hierarchy[name]['path'])
         parent_name = self._parent_map.get(name)
         parent_collection = self.get_collection(parent_name) if parent_name else None
         

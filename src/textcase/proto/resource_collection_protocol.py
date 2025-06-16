@@ -87,6 +87,39 @@ class ResourceItem(Protocol[T]):
         ...
 
 
+class ItemNameGenerator(Protocol[T]):
+    """Abstract base class for generating next available item names.
+    
+    This class provides the interface for generating sequential item names
+    based on existing items in a collection.
+    """
+    
+    @abstractmethod
+    def get_next_item_name(self, existing_items: List[str], prefix: str = '') -> str:
+        """Generate the next available item name.
+        
+        Args:
+            existing_items: List of existing item names in the collection
+            prefix: Optional prefix to filter items
+            
+        Returns:
+            The next available item name
+        """
+        ...
+    
+    @abstractmethod
+    def get_numeric_part(self, item_name: str, prefix: str = '') -> Optional[int]:
+        """Parse the numeric part from an item name.
+        
+        Args:
+            item_name: The item name to parse
+            prefix: Optional prefix to match
+            
+        Returns:
+            The numeric value if found, None otherwise
+        """
+        ...
+
 class ResourceCollection(Protocol[T]):
     """Protocol for resource collections.
     
@@ -296,6 +329,29 @@ class ResourceCollection(Protocol[T]):
     @abstractmethod
     def remove_tag(self, tag: str) -> bool:
         """Remove a tag from this collection."""
+        ...
+
+    # Item name generation
+    @abstractmethod
+    def get_next_item_name(self, prefix: str = '') -> str:
+        """Generate the next available item name with numeric numbering.
+        
+        This method finds the maximum numeric value among existing items that match
+        the given prefix pattern and returns the next sequential number.
+        
+        Args:
+            prefix: Optional prefix to filter items. If empty, considers all numeric items.
+                   For example, if collection has [REQ-001.md, REQ-001.2.md] and prefix='001.',
+                   the next item would be '001.3'. If prefix='', next item would be '2' or '002'.
+        
+        Returns:
+            The next available item name as a string
+            
+        Examples:
+            - Collection has items: ['001', '002', '005'] -> get_next_item_name() returns '006'
+            - Collection has items: ['001.1', '001.2', '002'] -> get_next_item_name('001.') returns '001.3'
+            - Empty collection -> get_next_item_name() returns '1' or '001' (implementation dependent)
+        """
         ...
 
     # Iteration support

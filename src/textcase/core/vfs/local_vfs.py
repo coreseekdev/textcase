@@ -325,7 +325,7 @@ class LocalVFS(ServiceVFSProtocol):
             is_dir = os.path.isdir(item_local_path)
             
             items.append(
-                (item_path, EntryType.DIR if is_dir else EntryType.FILE)
+                (PurePosixPath(item), EntryType.DIR if is_dir else EntryType.FILE)
             )
         
         # Apply sorting if specified in options
