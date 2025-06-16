@@ -1,0 +1,427 @@
+#
+# Copyright 2025 coreseek.com
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+"""Configuration collection manager implementation."""
+
+from pathlib import Path, PurePosixPath
+from typing import Generic, TypeVar, Optional, Tuple, Dict, List, Union, Iterator
+import yaml
+
+from ..client.vfs_client import VFSClient, VFSClientException
+from ..proto.resource_collection_protocol import ResourceCollection, ResourceItem, ResourceCollectionManager
+from .config_collection import ConfigCollectionImpl, ConfigTemplateCollectionImpl
+
+T = TypeVar('T')
+
+
+class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
+    """Manager for configuration collections."""
+    
+    # 预定义的配置集合名称
+    PREDEFINED_COLLECTIONS = [
+        "config.agent",
+        "config.provider",
+        # 其他预定义的配置集合
+    ]
+
+    # 配置集合前缀
+    CONFIG_PREFIX = "config."
+    
+    def __init__(self, repo_root: Union[Path, PurePosixPath, str], vfs: VFSClient):
+        """
+        Args:
+            repo_root: Path to the repository root
+            vfs: VFS client for file operations
+        """
+        # 默认为 repo_root 路径下的 .config 子目录
+        
+        if isinstance(repo_root, str):
+            self._repo_root = PurePosixPath(repo_root)
+        elif isinstance(repo_root, Path):
+            self._repo_root = PurePosixPath(repo_root.as_posix())
+        else:
+            self._repo_root = repo_root
+        
+        self._vfs = vfs
+        self._config_collections: Dict[str, ConfigCollectionImpl[T]] = {}
+        self._prefix_to_collection = {}
+        self._prefix_list = []
+    
+    def get_collection(self, name: str) -> Optional[ResourceCollection[T]]:
+        """
+        Args:
+            name: Collection name
+            
+        Returns:
+            Collection or None if not found
+        """
+        # 检查是否是配置集合
+        if name.startswith("config."):
+            return self._get_config_collection(name)
+        
+        # 否则返回 None，因为这个管理器只处理配置集合
+        return None
+    
+    def parse_resource_reference(self, reference: str, partial: bool = False) -> Tuple[Optional[ResourceCollection[T]], Optional[ResourceItem[T]]]:
+        """Parse a reference to a resource item.
+        
+        Args:
+            reference: Reference string
+            partial: Whether to allow partial matching of item names
+            
+        Returns:
+            Tuple of (collection, item) or (collection, None) if only collection found
+            or (None, None) if reference is invalid
+        """
+        # 只处理 config.* 命名空间的引用
+        if not reference or not reference.startswith("config."):
+            return None, None
+        
+        return self.parse_config_reference(reference, partial)
+    
+    def _get_config_collection(self, name: str) -> Optional[ConfigCollectionImpl[T]]:
+        """Get or create a configuration collection.
+        
+        Args:
+            name: Collection name (must start with "config.")
+            
+        Returns:
+            Configuration collection or None if not a valid config collection name
+        """
+        if name in self._config_collections:
+            return self._config_collections[name]
+        
+        # 检查是否是预定义的配置集合
+        if name not in self.PREDEFINED_COLLECTIONS and not self._is_valid_config_collection(name):
+            return None
+        
+        # 映射到 .config 目录
+        # 例如 config.agent -> .config/agent
+        parts = name.split(".", 1)
+        if len(parts) != 2:
+            return None
+        
+        config_path = self._repo_root / parts[1]
+        
+        # 确保目录存在
+        try:
+            if not self._vfs.info(config_path):     # 如果不存在或其他错误（gitfs) , info 返回 None
+                self._vfs.mkdir(config_path, parents=True)
+                # 在此初始化？
+        except Exception as e:
+            # 如果创建目录失败，仍然返回集合对象，但操作可能会失败
+            raise ValueError(f"Failed to create config collection directory: {config_path}")
+        
+        # 创建集合 ， 自动初始化？
+        collection = ConfigCollectionImpl[T](name, config_path, self._vfs)
+        self._config_collections[name] = collection
+        return collection
+    
+    def _is_valid_config_collection(self, name: str) -> bool:
+        """Check if a name is a valid configuration collection name.
+        
+        Args:
+            name: Collection name to check
+            
+        Returns:
+            True if the name is valid, False otherwise
+        """
+        if not name.startswith("config."):
+            return False
+        
+        parts = name.split(".")
+        if len(parts) != 2:
+            return False
+        
+        # 检查目录是否存在
+        config_path = self._config_root / parts[1]
+        try:
+            return self._vfs.exists(str(config_path))
+        except Exception:
+            return False
+    
+    def parse_config_reference(self, reference: str, partial: bool = False) -> Tuple[Optional[ConfigCollectionImpl[T]], Optional[ResourceItem[T]]]:
+        """Parse a reference to a configuration item.
+        
+        Args:
+            reference: Reference string (e.g., "config.provider.openai")
+            partial: Whether to allow partial matching of item names
+            
+        Returns:
+            Tuple of (collection, item) or (collection, None) if only collection found
+            or (None, None) if reference is invalid
+        """
+        if not reference or not reference.startswith("config."):
+            return None, None
+        
+        parts = reference.split(".")
+        if len(parts) < 2:
+            return None, None
+        
+        # 处理 config.collection.item 格式
+        if len(parts) >= 3:
+            collection_name = f"{parts[0]}.{parts[1]}"
+            item_name = parts[2]
+            
+            collection = self._get_config_collection(collection_name)
+            if not collection:
+                return None, None
+            
+            if partial:
+                # 支持部分匹配
+                item_names = sorted(collection.list_items())
+                for existing_item_name in item_names:
+                    if existing_item_name.startswith(item_name):
+                        item = collection.get_item(existing_item_name)
+                        if item:
+                            return collection, item
+            else:
+                # 精确匹配
+                item = collection.get_item(item_name)
+                return collection, item
+        
+        # 处理 config.collection 格式
+        collection_name = reference
+        collection = self._get_config_collection(collection_name)
+        return collection, None
+    
+    @property
+    def root_collection(self) -> ResourceCollection[T]:
+        """Get the default collection for operations.
+        
+        Returns:
+            The default collection instance
+        """
+        # 配置集合没有真正的根集合，返回一个预定义的配置集合
+        return self._get_config_collection("config.agent")
+    
+    def create_collection(self, name: str, parent: Optional[ResourceCollection[T]] = None) -> ResourceCollection[T]:
+        """Create a new collection.
+        
+        Args:
+            name: Name for the new collection
+            parent: Optional parent collection. If None, creates at root level
+            
+        Returns:
+            The created collection
+            
+        Raises:
+            ValueError: If a collection with the same name already exists or if name is invalid
+        """
+        if not name.startswith("config."):
+            raise ValueError(f"Invalid config collection name: {name}. Must start with 'config.'")
+        
+        if parent is not None:
+            raise ValueError("Config collections do not support parent collections")
+        
+        # 检查是否已存在
+        if name in self._config_collections:
+            raise ValueError(f"Config collection {name} already exists")
+        
+        # 创建新的配置集合
+        parts = name.split(".", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid config collection name: {name}")
+        
+        config_path = self._config_root / parts[1]
+        try:
+            if not self._vfs.exists(str(config_path)):
+                self._vfs.mkdir(str(config_path))
+        except Exception as e:
+            raise ValueError(f"Failed to create config collection directory: {e}")
+        
+        # 创建集合
+        collection = ConfigCollectionImpl[T](name, config_path, self._vfs)
+        self._config_collections[name] = collection
+        return collection
+    
+    def remove_collection(self, name: str, parent: Optional[ResourceCollection[T]] = None) -> Optional[ResourceCollection[T]]:
+        """Remove a collection.
+        
+        Args:
+            name: Name of the collection to remove
+            parent: Optional parent collection. If None, removes from root level
+            
+        Returns:
+            The removed collection, or None if not found
+        """
+        if parent is not None:
+            return None  # 配置集合不支持父集合
+        
+        if not name.startswith("config."):
+            return None
+        
+        # 检查是否存在
+        collection = self._get_config_collection(name)
+        if not collection:
+            return None
+        
+        # 从缓存中移除
+        if name in self._config_collections:
+            removed = self._config_collections.pop(name)
+            
+            # 注意：这里不删除实际的目录，因为可能包含重要配置
+            # 如果需要删除目录，应该在这里添加代码
+            
+            return removed
+        
+        return None
+    
+    def add_collection(self, collection: ResourceCollection[T], parent: Optional[ResourceCollection[T]] = None) -> None:
+        """Add an existing collection to a parent.
+        
+        Args:
+            collection: Collection to add
+            parent: Optional parent collection. If None, adds to root level
+            
+        Raises:
+            ValueError: If a collection with the same name already exists in the parent
+        """
+        if parent is not None:
+            raise ValueError("Config collections do not support parent collections")
+        
+        name = collection.name
+        if not name.startswith("config."):
+            raise ValueError(f"Invalid config collection name: {name}. Must start with 'config.'")
+        
+        # 检查是否已存在
+        if name in self._config_collections:
+            raise ValueError(f"Config collection {name} already exists")
+        
+        # 添加到缓存
+        self._config_collections[name] = collection
+    
+    def move_collection(self, name: str, 
+                       from_parent: Optional[ResourceCollection[T]] = None,
+                       to_parent: Optional[ResourceCollection[T]] = None) -> bool:
+        """Move a collection from one parent to another.
+        
+        Args:
+            name: Name of the collection to move
+            from_parent: Source parent collection. If None, moves from root
+            to_parent: Target parent collection. If None, moves to root
+            
+        Returns:
+            True if the collection was moved successfully, False otherwise
+        """
+        # 配置集合不支持父集合，所以不支持移动
+        return False
+    
+    def list_collections(self, parent: Optional[ResourceCollection[T]] = None) -> List[str]:
+        """List collection names under a parent.
+        
+        Args:
+            parent: Optional parent collection. If None, lists root-level collections
+            
+        Returns:
+            List of collection names
+        """
+        if parent is not None:
+            return []  # 配置集合不支持父集合
+        
+        return self.list_config_collections()
+    
+    def iter_all_collections(self, include_root: bool = True) -> Iterator[ResourceCollection[T]]:
+        """Iterate over all collections in the hierarchy.
+        
+        Args:
+            include_root: Whether to include the root collection in iteration
+            
+        Returns:
+            Iterator over all collections in the hierarchy
+        """
+        for name in self.list_config_collections():
+            collection = self._get_config_collection(name)
+            if collection:
+                yield collection
+    
+    def find_collection_path(self, collection: ResourceCollection[T]) -> List[str]:
+        """Find the path from root to a specific collection.
+        
+        Args:
+            collection: Collection to find path for
+            
+        Returns:
+            List of collection names representing the path from root
+        """
+        # 配置集合没有层次结构，所以路径就是集合名称本身
+        if collection.name.startswith("config."):
+            return [collection.name]
+        return []
+    
+    def list_config_collections(self) -> List[str]:
+        """List all available configuration collections.
+        
+        Returns:
+            List of configuration collection names
+        """
+        result = []
+        
+        # 添加预定义的集合
+        for name in self.PREDEFINED_COLLECTIONS:
+            parts = name.split(".", 1)
+            if len(parts) == 2:
+                config_path = self._config_root / parts[1]
+                try:
+                    if self._vfs.exists(str(config_path)):
+                        result.append(name)
+                except Exception:
+                    pass
+        
+        # 添加动态发现的集合
+        try:
+            if self._vfs.exists(str(self._config_root)):
+                dirs = self._vfs.list_dirs(str(self._config_root))
+                for dir_name in dirs:
+                    config_name = f"config.{dir_name}"
+                    if config_name not in result:
+                        result.append(config_name)
+        except Exception:
+            pass
+        
+        return sorted(result)
+    
+    def list_available_templates(self, collection_name: str) -> Dict[str, str]:
+        """List available templates for a configuration collection.
+        
+        Args:
+            collection_name: Configuration collection name
+            
+        Returns:
+            Dictionary mapping template names to template descriptions
+        """
+        result = {}
+        
+        collection = self._get_config_collection(collection_name)
+        if not collection:
+            return result
+        
+        template_collection = collection.template_collection
+        template_names = template_collection.list_items()
+        
+        for template_name in template_names:
+            template_item = template_collection.get_item(template_name)
+            if template_item:
+                # 尝试从模板内容中提取描述
+                try:
+                    content = template_item.content
+                    yaml_data = yaml.safe_load(content)
+                    description = yaml_data.get('description', 'No description')
+                except Exception:
+                    description = 'No description'
+                
+                result[template_name] = description
+        
+        return result

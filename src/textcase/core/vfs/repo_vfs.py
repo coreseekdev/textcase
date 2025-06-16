@@ -128,7 +128,7 @@ class RepoVFS(ServiceVFSProtocol):
         """Check if the VFS is read-only."""
         return self._local_vfs.readonly()
     
-    def info(self, path: PurePosixPath) -> Dict[str, Any]:
+    def info(self, path: PurePosixPath) -> Optional[Dict[str, Any]]:
         """Get information about a path.
         
         Args:

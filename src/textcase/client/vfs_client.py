@@ -169,7 +169,7 @@ class VFSClient:
         result = self._handle_rpc_exception(self.client.mount_point)
         return PurePosixPath(result)
     
-    def info(self, path: Union[str, PurePosixPath]) -> Dict[str, Any]:
+    def info(self, path: Union[str, PurePosixPath]) -> Optional[Dict[str, Any]]:
         """Get information about a path.
         
         Args:

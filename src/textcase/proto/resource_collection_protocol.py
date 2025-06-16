@@ -541,7 +541,8 @@ class ResourceCollectionManager(Protocol[T]):
                 'NONEEXIST' -> (None, None)              # Nothing found
         """
         ...
-    
+    '''
+    # 查询接口考虑单独分离出来
     @abstractmethod
     def search_items_across_collections(self, 
                                       query: str, 
@@ -558,3 +559,4 @@ class ResourceCollectionManager(Protocol[T]):
             Dictionary mapping collection names to matching items
         """
         ...
+    '''

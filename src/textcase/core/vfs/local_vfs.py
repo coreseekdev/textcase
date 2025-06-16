@@ -289,7 +289,7 @@ class LocalVFS(ServiceVFSProtocol):
             
         return str(local_path)
     
-    def info(self, path: PurePosixPath) -> Dict[str, Any]:
+    def info(self, path: PurePosixPath) -> Optional[Dict[str, Any]]:
         """Get information about a path.
         
         Args:
@@ -307,7 +307,8 @@ class LocalVFS(ServiceVFSProtocol):
         # 否则，使用本地文件系统
         local_path = self._resolve_local_path(remaining_path)
         if not os.path.exists(local_path):
-            raise FileNotFoundError(f"Path not found: {path}")
+            # raise FileNotFoundError(f"Path not found: {path}")
+            return None
         
         stat = os.stat(local_path)
         return {

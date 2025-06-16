@@ -194,9 +194,11 @@ class GitVFS(ServiceVFSProtocol):
                         'commit_hash': str(target_commit.id)
                     }
                 except KeyError:
-                    raise FileNotFoundError(f"Tag not found: {tag_name}")
+                    # raise FileNotFoundError(f"Tag not found: {tag_name}")
+                    return None
             else:
-                raise ValueError(f"Invalid tag path: {path}")
+                # raise ValueError(f"Invalid tag path: {path}")
+                return None
                 
         elif parts[0] == 'branch':
             if len(parts) == 1:
@@ -228,9 +230,11 @@ class GitVFS(ServiceVFSProtocol):
                         'commit_hash': str(target_commit.id)
                     }
                 except KeyError:
-                    raise FileNotFoundError(f"Branch not found: {branch_name}")
+                    # raise FileNotFoundError(f"Branch not found: {branch_name}")
+                    return None
             else:
-                raise ValueError(f"Invalid branch path: {path}")
+                # raise ValueError(f"Invalid branch path: {path}")
+                return None
                 
         elif parts[0] == 'tree':
             if len(parts) == 1:
@@ -273,7 +277,8 @@ class GitVFS(ServiceVFSProtocol):
                             'ref': ref
                         }
                 except Exception as e:
-                    raise ValueError(f"Error accessing git path {path}: {e}")
+                    # raise ValueError(f"Error accessing git path {path}: {e}")
+                    return None
         
         # Legacy format support: ref/path/to/file
         ref = parts[0]
@@ -305,7 +310,8 @@ class GitVFS(ServiceVFSProtocol):
                     'ref': ref
                 }
         except Exception as e:
-            raise ValueError(f"Error accessing git path {path}: {e}")
+            # raise ValueError(f"Error accessing git path {path}: {e}")
+            return None
     
     def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PurePosixPath, EntryType]]:
         """List contents of a directory.

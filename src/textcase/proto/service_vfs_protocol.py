@@ -134,7 +134,7 @@ class ServiceVFSProtocol(ABC):
         pass
 
     @abstractmethod
-    def info(self, path: PurePosixPath) -> Dict[str, Any]:
+    def info(self, path: PurePosixPath) -> Optional[Dict[str, Any]]:
         """Get information about a path.
         
         Args:

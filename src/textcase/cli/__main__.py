@@ -30,6 +30,7 @@ from textcase.cli.commands.create import create
 from textcase.cli.commands.tag import tag
 from textcase.cli.commands.clear import clear
 from textcase.cli.commands.list import list_cmd
+from textcase.cli.commands.config import config_cmd
 
 __all__ = ['main']
 
@@ -113,6 +114,7 @@ cli.add_command(create)
 cli.add_command(tag)
 cli.add_command(clear)
 cli.add_command(list_cmd, name='list')
+cli.add_command(config_cmd, name='config')
 
 
 def main():

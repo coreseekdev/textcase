@@ -14,6 +14,7 @@ import yaml
 from ..client.vfs_client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection, ResourceCollectionManager, ResourceItem
 from .collection import ResourceCollectionImpl
+from .config_collection_manager import ConfigCollectionManagerImpl
 
 T = TypeVar('T')
 
@@ -50,6 +51,9 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         self._parent_map: Dict[str, Optional[str]] = {}  # collection_name -> parent_name
         self._root_collection_name: Optional[str] = None
         
+        # 管理配置的文件的集合
+        self._config_collection_manager: Optional[ConfigCollectionManagerImpl[T]] = None
+
         # 缓存集合前缀映射关系
         self._prefix_to_collection: Dict[str, Dict] = {}
         self._prefix_list: List[str] = []
@@ -64,6 +68,39 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             return self.get_collection(self._root_collection_name)
         return None
     
+    # 处理与 config collection 有关的代码
+    def _get_config_collection(self, name: str) -> Optional[ResourceCollection[T]]:
+        """Get or create a configuration collection.
+        
+        Args:
+            name: Collection name (must start with "config.")
+            
+        Returns:
+            Configuration collection or None if not a valid config collection name
+            
+        Raises:
+            ValueError: If root module is not configured
+        """
+        # 检查是否有根模块配置
+        if not self._root_collection_name:
+            raise ValueError("Root module not configured. Cannot access config collections.")
+            
+        # 初始化配置集合管理器（如果尚未初始化）
+        if not self._config_collection_manager:
+            root_collection = self.get_collection(self._root_collection_name)
+            if not root_collection:
+                raise ValueError(f"Root collection '{self._root_collection_name}' not found")
+                
+            # 使用根模块路径的 .config 作为配置根目录, 注意 config 是按需加载的，因此不一定存在
+            repo_root = root_collection.path.joinpath(".config")
+            
+            # 初始化配置集合管理器
+            self._config_collection_manager = ConfigCollectionManagerImpl[T](repo_root, self._vfs)
+            
+        # 使用管理器获取配置集合
+        return self._config_collection_manager.get_collection(name)
+
+
     def create_collection(
         self,
         name: str,
@@ -139,6 +176,12 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         Returns:
             The ResourceCollection if found, None otherwise
         """
+        # 对于配置集合需要特别处理，其特点为 config.xxxx 作为 name
+        if name.startswith(ConfigCollectionManagerImpl.CONFIG_PREFIX):
+            # 注意: config.xxx 仅能通过 get_collection 获取，不能添加，也无法删除（一旦创建过) 
+            # 注意: config.xxx 也不会出现再 list_collections 中 
+            return self._get_config_collection(name)
+
         if not name or name not in self._hierarchy:
             return None
             
@@ -390,7 +433,18 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         # 首先尝试完全匹配集合名称
         if reference in self._hierarchy:
             return self.get_collection(reference), None
-            
+
+        # 为配置类的 collection 开后门
+        if reference.startswith(ConfigCollectionManagerImpl.CONFIG_PREFIX):
+            """
+            可能的配置表达： 
+            - config.agent                  collection , none
+            - config.agent.template         collection , none
+            - conifg.agent.agent_name       collection , item | none
+            # 目前仅支持作为集合的情况
+            """
+            return self.get_collection(reference), None
+
         # 使用缓存的前缀映射关系
         # 如果缓存为空，先更新缓存
         if not self._prefix_to_collection:
@@ -536,7 +590,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
                     self._parent_map[child] = name
             
             # Set root collection
-            self._root_collection_name = data.get('root')
+            self._root_collection_name = data.get('root_collection')
             
             # 更新前缀映射缓存
             self._update_prefix_cache()
