@@ -6,7 +6,7 @@ sub-collection support.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Set, TypeVar, Generic, Protocol, Iterator
+from typing import Dict, List, Optional, Tuple, Set, TypeVar, Generic, Protocol, Iterator
 
 
 # Generic type for collection items
@@ -522,6 +522,23 @@ class ResourceCollectionManager(Protocol[T]):
             
         Returns:
             List of collection names representing the path from root
+        """
+        ...
+    
+    @abstractmethod
+    def parse_resource_reference(self, reference: str, partial: bool = False) -> Tuple[Optional[ResourceCollection[T]], Optional[ResourceItem[T]]]:
+        """Parse a string reference to locate a collection and/or item.
+        
+        Args:
+            reference: String reference to parse (e.g. 'REQ1', 'REQ')
+            partial: Whether to allow partial matches (e.g. 'REQ01' for 'REQ011')
+            
+        Returns:
+            A tuple of (collection, item) where either may be None if not found
+            Examples:
+                'REQ1' -> (REQ_collection, REQ001_item)  # Collection with name/prefix 'REQ' and item '001'
+                'REQ' -> (REQ_collection, None)          # Just the collection
+                'NONEEXIST' -> (None, None)              # Nothing found
         """
         ...
     

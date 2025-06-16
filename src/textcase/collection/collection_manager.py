@@ -4,8 +4,10 @@ This module provides the main manager for resource collections,
 storing hierarchy information in git_repo_root_path/.textcase.yml.
 """
 
+import os
+import re
 from pathlib import Path, PurePosixPath
-from typing import Dict, Generic, Iterator, List, Optional, Set, TypeVar, Union
+from typing import Dict, Generic, Iterator, List, Optional, Tuple, Set, TypeVar, Union
 
 import yaml
 
@@ -47,6 +49,10 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         self._hierarchy: Dict[str, Dict] = {}  # collection_name -> {children, path}
         self._parent_map: Dict[str, Optional[str]] = {}  # collection_name -> parent_name
         self._root_collection_name: Optional[str] = None
+        
+        # 缓存集合前缀映射关系
+        self._prefix_to_collection: Dict[str, Dict] = {}
+        self._prefix_list: List[str] = []
         
         # Load existing configuration
         self._load_config()
@@ -198,83 +204,68 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         if parent and parent not in self._hierarchy:
             raise ValueError(f"Parent collection '{parent}' does not exist")
         if not parent:
-            # 仅 root collection 可以没有 parent
+            # 如果没有指定父集合，则添加为根集合
             if self._root_collection_name:
-                raise ValueError(f"Root collection '{self._root_collection_name}' already exists")
+                # 如果已经有根集合，则添加为根集合的子集合
+                parent = self._root_collection_name
+            else:
+                # 如果没有根集合，则设置为根集合
+                self._root_collection_name = name
         
         # Add to hierarchy
-        if isinstance(collection, ResourceCollectionImpl):
-            # 由于理论上，所有的第三方 repo 都需要挂接在 root vfs 中，因此 记录的是 vfs path
-            relative_path = collection.path.relative_to(self._vfs.mount_point())
-        else:
-            raise NotImplemented
-            # For external collections, we need to determine the path
-            # relative_path = PurePosixPath('collections') / name
+        if name not in self._hierarchy:
+            self._hierarchy[name] = {'children': [], 'path': str(collection.path)}
         
-        self._hierarchy[name] = {
-            'children': [],
-            'path': str(relative_path)
-        }
-        
-        # Update parent relationship in memory
-        self._parent_map[name] = parent
-        
-        # Update parent's children list
+        # Add to parent's children list if specified
         if parent:
+            if parent not in self._hierarchy:
+                self._hierarchy[parent] = {'children': [], 'path': ''}
             if name not in self._hierarchy[parent]['children']:
                 self._hierarchy[parent]['children'].append(name)
-        else:
-            self._root_collection_name = name
-
-        # Cache the collection
-        if isinstance(collection, ResourceCollectionImpl):
-            self._collections_cache[name] = collection
+            self._parent_map[name] = parent
+        
+        # Add to cache
+        self._collections_cache[name] = collection
+        
+        # 更新前缀映射缓存
+        self._update_prefix_cache()
         
         # Save configuration
         self._save_config()
     
-    def remove_collection(self, name: str) -> bool:
-        """Remove a collection and all its sub-collections.
+    def remove_collection(self, name: str) -> Optional[ResourceCollection[T]]:
+        """Remove a collection from the manager.
         
         Args:
             name: The name of the collection to remove
             
         Returns:
-            True if the collection was removed, False if it didn't exist
+            The removed collection if found, None otherwise
         """
         if name not in self._hierarchy:
-            return False
-        
-        # Recursively remove all children first
-        children = self._hierarchy[name]['children'].copy()
-        for child_name in children:
-            self.remove_collection(child_name)
+            return None
+            
+        # Get the collection before removing
+        collection = self.get_collection(name)
         
         # Remove from parent's children list
-        parent_name = self._parent_map.get(name)
-        if parent_name and parent_name in self._hierarchy:
-            self._hierarchy[parent_name]['children'].remove(name)
-            
-        # Remove from parent map
-        if name in self._parent_map:
-            del self._parent_map[name]
+        parent = self._parent_map.get(name)
+        if parent and parent in self._hierarchy:
+            if name in self._hierarchy[parent]['children']:
+                self._hierarchy[parent]['children'].remove(name)
         
         # Remove from hierarchy
         del self._hierarchy[name]
+        
+        # Remove from parent map
+        if name in self._parent_map:
+            del self._parent_map[name]
         
         # Remove from cache
         if name in self._collections_cache:
             del self._collections_cache[name]
         
-        # Remove the actual collection directory and files
-        collection_path = PurePosixPath(self._hierarchy[name]['path'])
-        try:
-            self._vfs.remove(collection_path, force=True, recursive=True)
-        except VFSClientException:
-            # Continue even if physical removal fails
-            pass
-        
-        # Update root/default collection if necessary
+        # Update root collection if needed
         if self._root_collection_name == name:
             # Find a new root collection (one without parent)
             new_root = None
@@ -284,13 +275,13 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
                     break
             self._root_collection_name = new_root
         
-        if self._default_collection_name == name:
-            self._default_collection_name = self._root_collection_name
+        # 更新前缀映射缓存
+        self._update_prefix_cache()
         
         # Save configuration
         self._save_config()
         
-        return True
+        return collection
     
     def move_collection(self, name: str, new_parent: Optional[str]) -> bool:
         """Move a collection to a new parent.
@@ -378,6 +369,88 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             current = self._parent_map.get(current)
         
         return path
+        
+    def parse_resource_reference(self, reference: str, partial: bool = False) -> Tuple[Optional[ResourceCollection[T]], Optional[ResourceItem[T]]]:
+        """Parse a string reference to locate a collection and/or item.
+        
+        Args:
+            reference: The string reference to parse (e.g., "REQ1", "REQ")
+            partial: Whether to allow partial matches (e.g. 'REQ01' for 'REQ011')
+            
+        Returns:
+            A tuple of (collection, item) where either may be None if not found
+            Examples:
+                'REQ1' -> (REQ_collection, REQ001_item)  # Collection with name/prefix 'REQ' and item '001'
+                'REQ' -> (REQ_collection, None)          # Just the collection
+                'NONEEXIST' -> (None, None)              # Nothing found
+        """
+        if not reference:
+            return None, None
+            
+        # 首先尝试完全匹配集合名称
+        if reference in self._hierarchy:
+            return self.get_collection(reference), None
+            
+        # 使用缓存的前缀映射关系
+        # 如果缓存为空，先更新缓存
+        if not self._prefix_to_collection:
+            self._update_prefix_cache()
+            
+        # 查找最长匹配的前缀
+        best_match = None
+        remaining = ''
+        
+        # 对引用字符串进行大写处理，便于匹配
+        reference_upper = reference.upper()
+        
+        # 遍历缓存的前缀列表，查找匹配
+        for prefix in self._prefix_list:
+            if reference_upper.startswith(prefix):
+                best_match = self._prefix_to_collection[prefix]
+                remaining = reference[len(prefix):]
+                break
+        
+        # 如果没有找到匹配的集合前缀
+        if not best_match:
+            return None, None
+            
+        collection = best_match['collection']
+        sep = best_match['sep']
+        
+        # 如果没有剩余部分，则只返回集合
+        if not remaining:
+            return collection, None
+            
+        # 处理分隔符
+        if sep:
+            # 如果剩余部分以分隔符开头，去掉分隔符
+            if remaining.startswith(sep):
+                item_name = remaining[len(sep):]
+            else:
+                # 如果引用中省略了分隔符，直接使用剩余部分作为项目名
+                item_name = remaining
+        else:
+            item_name = remaining
+            
+        # 尝试获取项目
+        if item_name:
+            # 直接尝试获取项目, 不需要额外处理， item_name 会自动填充 0
+            item = collection.get_item(item_name)
+            if item:
+                return collection, item
+                            
+            # 仅在 partial 模式下才尝试查找以此名称开头的项目
+            if partial:
+                # 获取所有项目名称并排序，确保结果一致
+                item_names = sorted(collection.list_items())
+                for existing_item_name in item_names:
+                    if existing_item_name.startswith(item_name):
+                        item = collection.get_item(existing_item_name)
+                        if item:
+                            return collection, item
+        
+        # 返回找到的集合，但没有找到项目
+        return collection, None
     
     def search_items_across_collections(
         self,
@@ -429,22 +502,6 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         self._save_config()
         return True
     
-    def set_default_collection(self, name: str) -> bool:
-        """Set the default collection.
-        
-        Args:
-            name: The name of the collection to set as default
-            
-        Returns:
-            True if successful, False if collection doesn't exist
-        """
-        if name not in self._hierarchy:
-            return False
-        
-        self._default_collection_name = name
-        self._save_config()
-        return True
-    
     def _is_ancestor(self, ancestor: str, descendant: str) -> bool:
         """Check if one collection is an ancestor of another.
         
@@ -464,30 +521,56 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         return False
     
     def _load_config(self) -> None:
-        """Load configuration from .textcase.yml."""
+        """Load configuration from disk."""
         try:
             content = self._vfs.get_text(self._config_path, encoding='utf-8')
-            if content:
-                data = yaml.safe_load(content) or {}
-                
-                self._hierarchy = data.get('collections', {})
-                self._root_collection_name = data.get('root_collection')
-                
-                # Rebuild parent relationships from children lists
-                self._rebuild_parent_map()
-            else:
-                self._hierarchy = {}
-                self._parent_map = {}
-                self._root_collection_name = None
-                self._default_collection_name = None
-
+            data = yaml.safe_load(content) or {}
+            
+            # Load hierarchy
+            self._hierarchy = data.get('collections', {})
+            
+            # Build parent map
+            self._parent_map = {}
+            for name, info in self._hierarchy.items():
+                for child in info.get('children', []):
+                    self._parent_map[child] = name
+            
+            # Set root collection
+            self._root_collection_name = data.get('root')
+            
+            # 更新前缀映射缓存
+            self._update_prefix_cache()
         except FileNotFoundError:
-            # Config file doesn't exist, start with empty state
+            # No config file exists yet
             self._hierarchy = {}
             self._parent_map = {}
             self._root_collection_name = None
-            self._default_collection_name = None
+            self._prefix_to_collection = {}
+            self._prefix_list = []
             
+    def _update_prefix_cache(self) -> None:
+        """更新前缀到集合的映射缓存。
+        
+        当添加或删除集合时，应该调用此方法以更新缓存。
+        """
+        self._prefix_to_collection = {}
+        self._prefix_list = []
+        
+        for coll_name in self._hierarchy.keys():
+            collection = self.get_collection(coll_name)
+            if collection:
+                config = collection.config
+                if config and config.prefix:
+                    prefix = config.prefix.upper()  # 统一使用大写进行匹配
+                    self._prefix_to_collection[prefix] = {
+                        'collection': collection,
+                        'sep': config.sep
+                    }
+                    self._prefix_list.append(prefix)
+        
+        # 按前缀长度降序排序，确保优先匹配最长前缀
+        self._prefix_list.sort(key=len, reverse=True)
+    
     def _rebuild_parent_map(self) -> None:
         """Rebuild the parent map from the hierarchy's children lists."""
         # Clear existing parent map

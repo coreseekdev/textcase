@@ -79,22 +79,38 @@ def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, qu
     # Get resource manager
     resource_manager = textcase.resource_manager
     
-    # Find the collection with the given name
-    collection = Optional['ResourceCollection[T]']
+    # 使用 parse_resource_reference 查找集合
+    collection = None
+    item = None
+    
+    # 尝试解析引用，可能是集合名称或前缀
     try:
-        collection = resource_manager.get_collection(collection_name)
+        collection, item = resource_manager.parse_resource_reference(collection_name, partial=False)
     except Exception as e:
-        debug_echo(ctx, f"Error finding collection: {e}")
+        debug_echo(ctx, f"Error parsing resource reference: {e}")
     
     if not collection:
         click.echo(f"Error: Collection '{collection_name}' not found.", err=True)
         ctx.exit(1)
+        
+    # 如果找到了项目，这意味着用户可能误用了完整的项目引用而不是集合名称
+    if item:
+        click.echo(f"Warning: '{collection_name}' appears to be an item reference, not a collection name.")
+        click.echo(f"Using collection '{collection.name}' instead.")
+        # 继续使用找到的集合，但不使用找到的项目
     
     debug_echo(ctx, f"Found collection: {collection_name} at {collection.path}")
 
     # Get next available ID from collection using the new interface
     # Use the collection's get_next_item_name method
-    item_id = collection.get_next_item_name()
+    if name:
+        item_id = name
+        # check exist
+        if collection.has_item(item_id):
+            click.echo(f"Error: Item '{item_id}' already exists.", err=True)
+            ctx.exit(1)
+    else:
+        item_id = collection.get_next_item_name()
     debug_echo(ctx, f"Generated next item ID: {item_id}")
     
     item_key = collection.get_item_key(item_id)
@@ -147,11 +163,11 @@ def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, qu
                 
                 if mtime_after > mtime_before:
                     # File was modified, keep the item
-                    click.echo(f"Added resource item: {item_id}")
+                    click.echo(f"Added resource item: {item_key}")
                 else:
                     # File was not modified, remove the item
                     collection.remove_item(item_id)
-                    click.echo(f"Canceled: Item {item_id} not created (no changes made).")
+                    click.echo(f"Canceled: Item {item_key} not created (no changes made).")
                         
             except Exception as e:
                 click.echo(f"Error in editor: {e}", err=True)

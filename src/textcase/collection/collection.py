@@ -261,6 +261,10 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         Returns:
             The ResourceItem if found, None otherwise
         """
+        # 额外处理 name , 如果 name 是 类似 str(1) 
+        if name.isdigit() and self.config.num > 1:
+            name = name.zfill(self.config.num)
+
         if name in self._items_cache:
             return self._items_cache[name]
         
