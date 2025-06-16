@@ -155,34 +155,9 @@ def config_cmd(ctx: click.Context, reference: Optional[str] = None, item_name: O
     
     # 解析引用
     parts = reference.split('.')
-    
-    # 情况 2: 引用是一个模板集合 (config.xxx.template)
-    if len(parts) >= 3 and parts[-1] == "template":
-        # 构造基础集合名称
-        base_collection_name = '.'.join(parts[:-1])
-        collection = textcase.resource_manager.get_collection(base_collection_name)
-        
-        if not collection or not isinstance(collection, ConfigCollectionImpl):
-            click.echo(f"Configuration collection {base_collection_name} not found")
-            return
-        
-        # 获取模板集合
-        template_collection = _get_template_collection(collection)
-        if not template_collection:
-            click.echo(f"Template collection for {base_collection_name} not available")
-            return
-        
-        # 列出模板
-        templates = template_collection.list_items()
-        if not templates:
-            click.echo(f"No templates found in {reference}")
-            return
-        
-        click.echo(f"Templates in {reference}:")
-        for template in templates:
-            click.echo(f"  {template}")
-        return
-    
+
+    # config.xxx.template 采用普通配置集合同样的方式处理
+
     # 情况 3: 引用是一个配置集合 (config.xxx)
     collection, _ = _parse_config_reference(textcase, reference, False)
     if not collection:

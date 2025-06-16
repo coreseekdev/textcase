@@ -40,6 +40,9 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
 
     # 配置集合前缀
     CONFIG_PREFIX = "config."
+
+    # 模板集合的名称后缀
+    TEMPLATE_COLLECTION_POSTFIX = ".template"
     
     def __init__(self, repo_root: Union[Path, PurePosixPath, str], vfs: VFSClient):
         """
@@ -79,7 +82,9 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             return None
         
         config_type = parts[1]
-        
+        if config_type.endswith(self.TEMPLATE_COLLECTION_POSTFIX):
+            config_type = config_type[:-1*len(self.TEMPLATE_COLLECTION_POSTFIX)]
+
         # Get the package directory (similar to get_template_source_dir)
         current_file = Path(__file__)
         package_dir = current_file.parent.parent.parent
@@ -168,16 +173,23 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         Returns:
             Configuration collection or None if not a valid config collection name
         """
-        if name in self._config_collections:
-            return self._config_collections[name]
+        # 处理 .template 后缀
+        collection_name = name if not name.endswith(self.TEMPLATE_COLLECTION_POSTFIX) else name[:-1*len(self.TEMPLATE_COLLECTION_POSTFIX)]
+
+        if collection_name in self._config_collections:
+            return self._config_collections[collection_name]
         
         # 检查是否是预定义的配置集合
-        if name not in self.PREDEFINED_COLLECTIONS and not self._is_valid_config_collection(name):
+        # if name not in self.PREDEFINED_COLLECTIONS and not self._is_valid_config_collection(name):
+        #    return None
+        # 调整为根据数据文件判断
+        source_dir = self._get_config_source_dir(name)
+        if not source_dir:      # 配置项目没有预制模板，不认为是有效的
             return None
-        
+
         # 映射到 .config 目录
         # 例如 config.agent -> .config/agent
-        parts = name.split(".", 1)
+        parts = collection_name.split(".", 1)
         if len(parts) != 2:
             return None
         
@@ -187,16 +199,19 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         try:
             if not self._vfs.info(config_path):     # 如果不存在或其他错误（gitfs) , info 返回 None
                 self._vfs.mkdir(config_path, parents=True)
-                # 复制默认配置文件到新创建的目录
+                # 复制默认配置文件到新创建的目录, 使用 collection_name 也可也
                 self._copy_config_files_to_vfs(name, config_path)
         except Exception as e:
             # 如果创建目录失败，仍然返回集合对象，但操作可能会失败
             raise ValueError(f"Failed to create config collection directory: {config_path}")
         
         # 创建集合
-        collection = ConfigCollectionImpl[T](name, config_path, self._vfs)
-        self._config_collections[name] = collection
-        return collection
+        collection = ConfigCollectionImpl[T](collection_name, config_path, self._vfs)
+        self._config_collections[collection_name] = collection
+        if collection_name == name:
+            return collection
+        else:
+            return collection.template_collection
     
     def _is_valid_config_collection(self, name: str) -> bool:
         """Check if a name is a valid configuration collection name.

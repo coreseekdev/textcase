@@ -24,6 +24,7 @@ from typing import Dict, Any, Optional, List, TypeVar, Generic, Union, Iterator,
 from ..client.vfs_client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection, ResourceItem
 from .collection import ResourceCollectionImpl
+from ..proto.service_vfs_protocol import EntryType
 
 T = TypeVar('T')
 
@@ -214,86 +215,88 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
 class ConfigTemplateItemImpl(Generic[T], ResourceItem[T]):
     """Implementation of a configuration template item."""
     
-    def __init__(self, name: str, collection: 'ConfigTemplateCollectionImpl', vfs: VFSClient):
+    def __init__(self, name: str, collection: ResourceCollection[T], vfs: VFSClient = None):
         """Initialize a configuration template item.
         
         Args:
-            name: Name of the template
-            collection: Parent collection
+            name: Name of the item
+            collection: Collection this item belongs to
             vfs: VFS client for file operations
         """
         self._name = name
         self._collection = collection
         self._vfs = vfs
-        self._content = None
-        self._tags = set()  # Empty tags set - not supported for template items
     
     @property
     def name(self) -> str:
-        """Get the name of this template."""
+        """Get the name of this item."""
         return self._name
     
     @property
-    def content(self) -> str:
-        """Get the template content."""
-        if self._content is None:
-            self._load_content()
-        return self._content
+    def collection(self) -> ResourceCollection[T]:
+        """Get the collection this item belongs to."""
+        return self._collection
     
-    def _load_content(self) -> None:
-        """Load template content from file."""
+    def _find_template_file(self) -> Optional[str]:
+        """Find the template file for this item.
+        
+        Returns:
+            Path to the template file or None if not found
+        """
         try:
-            file_path = self._get_file_path()
-            self._content = self._vfs.get_text(str(file_path), encoding='utf-8')
+            for file in self._vfs.list_dir(str(self._collection.path)):
+                if file.endswith('.tmpl'):
+                    template_name = file.split('.')[0]
+                    if template_name == self._name:
+                        return str(self._collection.path / file)
+            return None
+        except Exception:
+            return None
+    
+    def read_content(self) -> str:
+        """Read the content of this template item.
+        
+        Returns:
+            Content of the template item
+        """
+        # 查找并读取模板文件
+        file_path = self._find_template_file()
+        if not file_path:
+            raise ValueError(f"Template file for '{self._name}' not found")
+        
+        try:
+            content = self._vfs.get(file_path)
+            if isinstance(content, bytes):
+                content = content.decode('utf-8')
+            return content
         except Exception as e:
-            raise VFSClientException(
-                'TemplateLoadError',
-                f'Failed to load template from {file_path}: {e}'
-            )
+            raise ValueError(f"Failed to read template content: {e}")
     
-    def _get_file_path(self) -> PurePosixPath:
-        """Get the file path for this template."""
-        return self._collection.path / f"{self._name}.yml.template"
-    
-    def render(self, variables: Dict[str, str] = None) -> str:
-        """Render the template with variables.
+    def write_content(self, content: str) -> None:
+        """Write content to this template item.
         
         Args:
-            variables: Dictionary of variables to substitute
-            
-        Returns:
-            Rendered template content
+            content: Content to write
         """
-        if self._content is None:
-            self._load_content()
+        # 模板项不支持写入操作
+        raise ValueError("Template items do not support write operations")
+    
+    def get_extension(self) -> str:
+        """Get the extension of this item.
         
-        if not variables:
-            return self._content
+        Returns:
+            Extension of the item (without the .tmpl suffix)
+        """
+        file_path = self._find_template_file()
+        if not file_path:
+            return ""
         
-        result = self._content
-        for key, value in variables.items():
-            placeholder = f"{{{{ {key} }}}}"
-            result = result.replace(placeholder, value)
-        
-        return result
-    
-    # Tag operations - not supported for template items
-    def assign_tag(self, tag: str) -> None:
-        """Template items do not support tags."""
-        raise NotImplementedError("Template items do not support tags")
-    
-    def unassign_tag(self, tag: str) -> None:
-        """Template items do not support tags."""
-        raise NotImplementedError("Template items do not support tags")
-    
-    def has_tag(self, tag: str) -> bool:
-        """Template items do not support tags."""
-        return False
-    
-    @property
-    def tags(self) -> List[str]:
-        """Template items do not support tags."""
-        return []
+        # 从文件名中提取扩展名（不包括 .tmpl）
+        filename = os.path.basename(file_path)
+        parts = filename.split('.')
+        if len(parts) > 2:  # 至少有 name.ext.tmpl
+            return '.'.join(parts[1:-1])  # 返回中间的扩展名部分
+        return ""
 
 
 class AbstractConfigCollection(Generic[T], ResourceCollection[T]):
@@ -592,15 +595,7 @@ class ConfigTemplateCollectionImpl(AbstractConfigCollection[T]):
         Returns:
             Next available item name
         """
-        # 模板项使用 default 作为默认名称
-        if not self.has_item("default"):
-            return "default"
-        
-        # 如果 default 已存在，使用数字后缀
-        i = 1
-        while self.has_item(f"template_{i}"):
-            i += 1
-        return f"template_{i}"
+        raise ValueError("Config template collections do not support get next item name")
     
     def add_item(self, name: str, content: str = "") -> ResourceItem[T]:
         """Add a new template item.
@@ -612,19 +607,7 @@ class ConfigTemplateCollectionImpl(AbstractConfigCollection[T]):
         Returns:
             The created item
         """
-        if self.has_item(name):
-            raise ValueError(f"Template '{name}' already exists")
-        
-        # 创建模板项
-        item = ConfigTemplateItemImpl[T](name, self, self._vfs)
-        self._items[name] = item
-        
-        # 如果提供了内容，立即写入
-        if content:
-            file_path = self._path / f"{name}.yml.template"
-            self._vfs.put(str(file_path), content.encode('utf-8'), create_if_missing=True)
-        
-        return item
+        raise ValueError("Config template collections do not support add item")
     
     def get_item(self, name: str) -> Optional[ResourceItem[T]]:
         """Get a template item by name.
@@ -635,19 +618,10 @@ class ConfigTemplateCollectionImpl(AbstractConfigCollection[T]):
         Returns:
             The item if found, None otherwise
         """
-        # 如果已缓存，直接返回
-        if name in self._items:
-            return self._items[name]
-        
-        # 检查文件是否存在
-        file_path = self._path / f"{name}.yml.template"
-        if not self._vfs.exists(str(file_path)):
-            return None
-        
-        # 创建模板项
-        item = ConfigTemplateItemImpl[T](name, self, self._vfs)
-        self._items[name] = item
-        return item
+        # 使用 list_items 检查模板是否存在
+        if name in self.list_items():
+            return ConfigTemplateItemImpl[T](name, self, self._vfs)
+        return None
     
     def has_item(self, name: str) -> bool:
         """Check if a template item exists.
@@ -658,12 +632,8 @@ class ConfigTemplateCollectionImpl(AbstractConfigCollection[T]):
         Returns:
             True if the item exists, False otherwise
         """
-        if name in self._items:
-            return True
-        
-        # 检查文件是否存在
-        file_path = self._path / f"{name}.yml.template"
-        return self._vfs.exists(str(file_path))
+        # 直接使用 list_items 检查模板是否存在
+        return name in self.list_items()
     
     def remove_item(self, name: str) -> bool:
         """Remove a template item.
@@ -674,17 +644,7 @@ class ConfigTemplateCollectionImpl(AbstractConfigCollection[T]):
         Returns:
             True if the item was removed, False otherwise
         """
-        # 如果已缓存，移除缓存
-        if name in self._items:
-            del self._items[name]
-        
-        # 删除文件
-        file_path = self._path / f"{name}.yml.template"
-        if self._vfs.exists(str(file_path)):
-            self._vfs.remove(str(file_path))
-            return True
-        
-        return False
+        raise ValueError("Config template collections do not support remove item")
     
     def list_items(self) -> List[str]:
         """List all template items.
@@ -692,13 +652,18 @@ class ConfigTemplateCollectionImpl(AbstractConfigCollection[T]):
         Returns:
             List of item names
         """
-        # 列出目录中的所有 .yml.template 文件
+        # 列出目录中的所有 .tmpl 文件
         try:
-            files = self._vfs.list_dir(str(self._path))
+            files = self._vfs.list(str(self._path))
             items = []
-            for file in files:
-                if file.endswith(".yml.template"):
-                    items.append(file[:-13])  # 移除 .yml.template 后缀
+            for file, entry_type in files:
+                if entry_type == EntryType.DIR:
+                    continue
+                file_path = PurePosixPath(file)
+                if file_path.suffix.lower() == ".tmpl":
+                    # 去掉扩展名，这样返回的名称可用直接定位到具体文件
+                    template_name = file_path.stem
+                    items.append(template_name)
             return items
         except Exception:
             return []
@@ -844,7 +809,7 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
     def template_collection(self) -> ConfigTemplateCollectionImpl[T]:
         """Get the template collection for this config collection."""
         if self._template_collection is None:
-            template_path = self._path / ".template"
+            template_path = self._path  # template 的数据路径与当前集合的相同
             self._template_collection = ConfigTemplateCollectionImpl(
                 f"{self._name}.template", 
                 template_path, 
