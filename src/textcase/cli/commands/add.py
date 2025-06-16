@@ -159,16 +159,42 @@ def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, qu
     else:
         # Get next available ID from collection
         try:
-            # TODO: Implement next ID generation
-            item_id = "001"  # Placeholder
+            # Get all existing items and find the maximum numeric ID
+            existing_items = collection.list_items()
+            max_num = 0
+            
+            for item_name in existing_items:
+                # item_name is actually a tuple (num, str) from parse_item_name
+                if isinstance(item_name, tuple) and len(item_name) >= 2:
+                    num_part = item_name[0]  # The numeric part
+                    if num_part > 0:
+                        max_num = max(max_num, num_part)
+                elif isinstance(item_name, str):
+                    # Fallback: try to parse as string
+                    filename = collection.config.generate_filename(item_name)
+                    parsed = collection.config.parse_item_name(filename)
+                    if parsed and parsed[0] > 0:
+                        max_num = max(max_num, parsed[0])
+            
+            # Generate next ID with proper zero-padding
+            next_num = max_num + 1
+            item_id = str(next_num).zfill(collection.config.num)
             debug_echo(ctx, f"Generated next item ID: {item_id}")
         except Exception as e:
             click.echo(f"Error generating item ID: {e}", err=True)
             ctx.exit(1)
     
-    # Create the full ID with prefix and separator
-    full_id = f"ITEM-{item_id}"  # Placeholder
-    extension = ".md"  # Default extension
+    # Get collection configuration
+    config = collection.config
+    
+    # Create the full ID with prefix and separator from config
+    if config.prefix:
+        full_id = f"{config.prefix}{config.sep}{item_id}"
+    else:
+        full_id = item_id
+    
+    # Use suffix from config or default to .md
+    extension = config.suffix if config.suffix else ".md"
     file_path = Path(collection.path) / f"{full_id}{extension}"
     
     debug_echo(ctx, f"Creating resource item at {file_path}")

@@ -32,8 +32,30 @@ USE_DIRECT_EDIT = True
 
 
 def get_editor() -> str:
-    """Get the editor from environment variables or use a default."""
-    return os.environ.get('EDITOR', 'notepad')  # Default to notepad on Windows
+    """Get the editor from environment variables or use a default.
+    
+    Priority order:
+    1. EDITOR environment variable
+    2. Git's core.editor configuration
+    3. Default to notepad on Windows
+    """
+    # First check EDITOR environment variable
+    editor = os.environ.get('EDITOR')
+    if editor:
+        return editor
+    
+    # Try to get git's default editor
+    try:
+        import subprocess
+        result = subprocess.run(['git', 'config', '--global', 'core.editor'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+        pass
+    
+    # Default to notepad on Windows
+    return 'notepad'
 
 
 def edit_with_editor(file_path: Path, initial_content: bytes = b'') -> Tuple[bool, bytes]:
