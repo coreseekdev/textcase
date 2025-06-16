@@ -78,6 +78,9 @@ class RepoVFS(ServiceVFSProtocol):
         # 委托给LocalVFS处理
         return self._local_vfs.to_vfs_path(local_path)
 
+    def to_local_path(self, vfs_path: PurePosixPath) -> Optional[Path]:
+        return self._local_vfs.to_local_path(vfs_path)
+
     def resolve_path(self, path: PurePosixPath) -> Tuple['ServiceVFSProtocol', PurePosixPath]:
         """Resolve a path to VFS and remaining path info.
         

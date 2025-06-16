@@ -55,6 +55,10 @@ class GitVFS(ServiceVFSProtocol):
         # Git VFS is not directly mapped to local file system paths
         return None
 
+    def to_local_path(self, vfs_path: PurePosixPath) -> Optional[Path]:
+        # Git VFS is not directly mapped to local file system paths
+        return None
+
     def resolve_path(self, path: PurePosixPath) -> Tuple['ServiceVFSProtocol', PurePosixPath]:
         """Resolve a path to VFS and remaining path info.
         

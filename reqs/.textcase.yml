@@ -3,6 +3,6 @@ prefix: REQ
 sep: ''
 suffix: .md
 tags:
-- TODO
-- DOING
-- DONE
+  DOING: ''
+  DONE: ''
+  TODO: ''

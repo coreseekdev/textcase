@@ -223,6 +223,12 @@ class ResourceCollection(Protocol[T]):
         """
         ...
     
+    @abstractmethod
+    def get_item_key(self, name: str) -> str:
+        """Get the unique key for an item name.
+        """
+        ...
+
     # Sub-collection management
     @abstractmethod
     def add_collection(self, collection: 'ResourceCollection[T]') -> None:

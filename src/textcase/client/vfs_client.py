@@ -396,6 +396,39 @@ class VFSClient:
                 str(e),
                 None
             )
+    
+    def to_local_path(self, vfs_path: Union[str, PurePosixPath]) -> Optional[Path]:
+        """Convert a VFS path to a local file system path if possible.
+        
+        This method attempts to convert a path from the VFS to its equivalent
+        path in the local file system. It handles mounted VFS instances by
+        checking if the VFS path belongs to any mounted VFS and delegating the
+        conversion if necessary.
+        
+        Args:
+            vfs_path: VFS path to convert (string or PurePosixPath)
+            
+        Returns:
+            Equivalent local file system path as Path if conversion is possible,
+            None if the path cannot be mapped to this VFS
+        """
+        # 确保路径是POSIX风格
+        if isinstance(vfs_path, str):
+            # 将Windows风格路径转换为POSIX风格
+            vfs_path = Path(vfs_path).as_posix()
+        path_str = str(vfs_path)
+        
+        try:
+            result = self._handle_rpc_exception(self.client.to_local_path, path_str)
+            if result is not None:
+                return Path(result)
+            return None
+        except Exception as e:
+            raise VFSClientException(
+                type(e).__name__,
+                str(e),
+                None
+            )
 
 
 # For backward compatibility

@@ -154,7 +154,31 @@ class LocalVFS(ServiceVFSProtocol):
                         
         # 如果没有找到匹配的路径，返回None
         return None
- 
+    
+    def to_local_path(self, vfs_path: PurePosixPath) -> Optional[Path]:
+        """Convert a VFS path to a local file system path if possible.
+        
+        This method attempts to convert a path from the VFS to its equivalent
+        path in the local file system. It handles mounted VFS instances by
+        checking if the VFS path belongs to any mounted VFS and delegating the
+        conversion if necessary.
+        
+        Args:
+            vfs_path: VFS path to convert
+            
+        Returns:
+            Equivalent local file system path as Path if conversion is possible,
+            None if the path cannot be mapped to this VFS
+        """
+        # 检查路径是否对应一个挂载点
+        vfs, remaining_path = self.resolve_path(vfs_path)
+        if vfs is not self:
+            # 如果路径对应一个挂载点，委托给挂载的 VFS
+            return vfs.to_local_path(remaining_path)
+        
+        # 否则，使用本地文件系统
+        return self._resolve_local_path(remaining_path)
+
     # Mount management
     def mount(self, path: PurePosixPath, vfs: ServiceVFSProtocol) -> Tuple[bool, str]:
         """Mount a VFS at the given path.

@@ -78,12 +78,21 @@ class CollectionConfig:
 
         try:            
             data = yaml.safe_load(content) or {}
+            
+            # Handle tags field - convert list to dict if needed
+            tags_data = data.get('tags', {})
+            if isinstance(tags_data, list):
+                # Convert list of tag names to dict with empty descriptions
+                tags_dict = {tag: "" for tag in tags_data}
+            else:
+                tags_dict = tags_data
+            
             return cls(
                 prefix=data.get('prefix', ""),
                 num=data.get('num', 3),
                 sep=data.get('sep', ''),
                 suffix=data.get('suffix', '.md'),
-                tags=data.get('tags', {}),
+                tags=tags_dict,
                 settings=data.get('settings', {})
             )
         except Exception as e:

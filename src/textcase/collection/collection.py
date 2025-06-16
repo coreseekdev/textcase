@@ -305,6 +305,11 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
         """
         return self.get_item(name) is not None
     
+    def get_item_key(self, name: str) -> str:
+        """Get the unique key for an item name.
+        """
+        return self.config.prefix + self.config.sep + name
+
     def list_items(self) -> List[str]:
         """List all item names in this collection.
         
@@ -332,7 +337,7 @@ class ResourceCollectionImpl(Generic[T], ResourceCollection[T]):
                 if self.config.prefix:
                     if not filename.startswith(self.config.prefix+self.config.sep):
                         continue
-                    
+
                 _, item_name = self.config.parse_item_name(filename)
                 if item_name:
                     item_names.append(item_name)

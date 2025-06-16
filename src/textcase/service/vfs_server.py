@@ -257,6 +257,24 @@ class VFSServer:
             return str(result) if result is not None else None
         except Exception as e:
             return error_result_from_exception(e)
+
+    def to_local_path(self, vfs_path: str) -> ResultOrError[Optional[str]]:
+        """Convert a VFS path to a local file system path if possible.
+        
+        Args:
+            vfs_path: VFS path to convert
+            
+        Returns:
+            Equivalent local file system path as string if conversion is possible,
+            None if the path cannot be mapped to this VFS,
+            or ErrorResult if operation failed
+        """
+        try:
+            posix_path = self._convert_path(vfs_path)
+            result = self._vfs.to_local_path(posix_path)
+            return str(result) if result else None
+        except Exception as e:
+            return error_result_from_exception(e)
     
     def resolve_path(self, path: str) -> ResultOrError[Tuple[str, str]]:
         """Resolve a path to VFS and remaining path info.
@@ -343,18 +361,19 @@ class VFSServer:
         except Exception as e:
             return error_result_from_exception(e)
     
-    def remove(self, path: str) -> ResultOrError[bool]:
+    def remove(self, path: str, force: bool = False) -> ResultOrError[bool]:
         """Remove a file or directory.
         
         Args:
             path: Path to remove
+            force: Force removal even if non-empty directory
             
         Returns:
             Success status or ErrorResult if operation failed
         """
         try:
             posix_path = self._convert_path(path)
-            return self._vfs.remove(posix_path)
+            return self._vfs.remove(posix_path, force)
         except Exception as e:
             return error_result_from_exception(e)
     

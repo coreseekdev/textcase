@@ -160,11 +160,11 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         try:
             file_path = self.get_file_path()
             info = self._vfs.info(file_path)
-            return info is not None and not info.is_dir
-        except VFSClientException:
+            return info is not None
+        except FileNotFoundError:
             return False
     
-    def create(self, content: str = "") -> None:
+    def create(self, content: Optional[T] = None) -> None:
         """Create the item file.
         
         Args:
@@ -175,8 +175,10 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         """
         try:
             file_path = self.get_file_path()
-            self._vfs.put(file_path, content.encode('utf-8'), create_if_missing=True)
-        except VFSClientException as e:
+            if content is None:
+                content = self.data if self.data is not None else ""
+            self._vfs.put(file_path, str(content).encode('utf-8'), create_if_missing=True)
+        except (VFSClientException, FileNotFoundError, PermissionError) as e:
             raise VFSClientException(
                 'ItemCreateError',
                 f'Failed to create item file {file_path}: {e}'
@@ -251,8 +253,8 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
                     lines = [line.strip() for line in content.splitlines()]
                     if self._name in lines:
                         self._tags.add(tag_name)
-            except VFSClientException:
-                # Tag file doesn't exist, skip
+            except (VFSClientException, FileNotFoundError, PermissionError):
+                # Tag file doesn't exist or can't be read, skip
                 continue
     
     def _update_tag_file(self, tag: str, add: bool) -> None:

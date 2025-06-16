@@ -15,63 +15,48 @@
 #
 """Add command implementation."""
 
-import os
-import re
-import time
-import threading
+import subprocess
 import click
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional, Tuple, Dict, Any
 
+from textcase.proto.resource_collection_protocol import ResourceCollection, ResourceItem
 from textcase.cli.utils import debug_echo
 from textcase.cli.commands.edit import edit_with_editor, get_editor
 
 
-def monitor_file_changes(file_path: Path, module, item_id: str, timeout: int = 60) -> None:
-    """
-    Monitor a file for changes and add it to the module order when changes are detected.
-
+def get_vfs_local_path(collection: 'ResourceCollection[T]', vfs_path: PurePosixPath) -> Path:
+    """Convert a VFS path to a local file system path.
+    
     Args:
-        file_path: Path to the file to monitor
-        module: The module to add the item to
-        item_id: The ID of the item
-        timeout: How long to monitor for changes in seconds
+        collection: The resource collection
+        vfs_path: VFS path to convert
+        
+    Returns:
+        Local file system path
+        
+    Raises:
+        RuntimeError: If the path cannot be converted
     """
-    if not file_path.exists():
-        return
-
-    initial_mtime = file_path.stat().st_mtime
-    start_time = time.time()
-
-    while time.time() - start_time < timeout:
-        try:
-            # Check if file exists and has been modified
-            if file_path.exists():
-                current_mtime = file_path.stat().st_mtime
-                if current_mtime > initial_mtime:
-                    # File has been modified, add to order and exit
-                    try:
-                        # Create a resource item and add it to the collection
-                        # TODO: Implement resource item creation
-                        return
-                    except Exception as e:
-                        # If we can't add to collection, just return
-                        print(f"Error adding to collection: {e}")
-                        return
-        except Exception:
-            # Any error, just continue monitoring
-            pass
-
-        # Sleep to avoid high CPU usage
-        time.sleep(1)
+    try:
+        # Use the new to_local_path method from VFS client
+        local_path = collection._vfs.to_local_path(vfs_path)
+        if local_path:
+            return local_path
+        else:
+            # Fallback: construct path manually if VFS doesn't support conversion
+            # This is a simple fallback that may not work in all cases
+            raise RuntimeError(f"Cannot convert VFS path {vfs_path} to local path")
+    except Exception as e:
+        raise RuntimeError(f"Failed to convert VFS path {vfs_path} to local path: {e}")
 
 @click.command()
 @click.option('-n', '--name', help='Specify a custom name or number for the resource item')
 @click.option('-q', '--quiet', is_flag=True, help='Skip opening the editor and save directly')
-@click.option('-m', '--message', help='Specify content message for the resource item (supports multi-line)')
+@click.option('-m', '--message', multiple=True, help='Specify content message for the resource item (can be used multiple times)')
 @click.argument('collection_name', type=str)
 @click.pass_context
-def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, quiet: bool = False, message: Optional[str] = None):
+def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, quiet: bool = False, message: tuple = ()):
     """
     Add a new resource item to a collection.
     
@@ -82,6 +67,7 @@ def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, qu
       textcase add -n custom_name docs            # Add a new resource item with custom string name
       textcase add -n 3 docs                      # Add a new resource item with custom numeric ID
       textcase add -m "My content" docs           # Add a resource item with specified content
+      textcase add -m "Line 1" -m "Line 2" docs   # Add with multiple messages joined by newlines
       textcase add -m "Multi-line\ncontent" docs  # Add with multi-line content
     """
     # Get TextCase instance from context
@@ -94,7 +80,7 @@ def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, qu
     resource_manager = textcase.resource_manager
     
     # Find the collection with the given name
-    collection = None
+    collection = Optional['ResourceCollection[T]']
     try:
         collection = resource_manager.get_collection(collection_name)
     except Exception as e:
@@ -111,100 +97,70 @@ def add(ctx: click.Context, collection_name: str, name: Optional[str] = None, qu
     item_id = collection.get_next_item_name()
     debug_echo(ctx, f"Generated next item ID: {item_id}")
     
-    # Get collection configuration
-    config = collection.config
-    
-    # Create the full ID with prefix and separator from config
-    if config.prefix:
-        full_id = f"{config.prefix}{config.sep}{item_id}"
-    else:
-        full_id = item_id
-    
-    # Use suffix from config or default to .md
-    extension = config.suffix if config.suffix else ".md"
-    file_path = Path(collection.path) / f"{full_id}{extension}"
-    
-    debug_echo(ctx, f"Creating resource item at {file_path}")
-    
+    item_key = collection.get_item_key(item_id)
+
     # Create initial content with a title and optional message
     if message:
+        # Join multiple messages with newlines
+        combined_message = '\n'.join(message)
         # Add the title with a separator and the message
-        initial_content = f"# {full_id}: {message}\n\n"
+        initial_content = f"# {item_key}: {combined_message}\n\n"
         quiet = True
     else:
         # Just add the title
-        initial_content = f"# {full_id}\n\n"
-    
+        initial_content = f"# {item_key}\n\n"
+        
     try:
         if quiet:
-            # In quiet mode, create the file directly
+            # In quiet mode, create the item directly using collection.add_item
             try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(initial_content)
-                was_modified = True
-                
-                # In quiet mode, directly add to collection
-                try:
-                    # TODO: Implement resource item creation and addition to collection
-                    click.echo(f"Added resource item: {full_id}")
-                except Exception as e:
-                    click.echo(f"Error adding item to collection: {e}", err=True)
-                    if file_path.exists():
-                        try:
-                            os.remove(file_path)
-                        except Exception:
-                            pass
-                    ctx.exit(1)
-                    
+                item = collection.add_item(item_id)
+                item.write_content(initial_content)
+                click.echo(f"Added resource item: {item_id}")
             except Exception as e:
                 click.echo(f"Error creating resource item: {e}", err=True)
                 ctx.exit(1)
         else:
-            # Interactive mode: open the editor
+            # Interactive mode: create item, write initial content, open editor, check for modifications
             try:
-                # Start a monitoring thread to watch for file changes
-                monitor_thread = threading.Thread(
-                    target=monitor_file_changes,
-                    args=(file_path, collection, full_id),
-                    daemon=True
-                )
-                monitor_thread.start()
+                # 1. Create item using collection.add_item
+                item: 'ResourceItem[T]' = collection.add_item(item_id, initial_content)
+                # item.write_content(initial_content)
                 
-                # Open the editor
-                was_modified, content = edit_with_editor(file_path, initial_content.encode('utf-8'))
+                # 2. Get file modification time via VFS info
+                file_path_vfs = item.get_file_path()
+                file_info_before = collection._vfs.info(file_path_vfs)
+                mtime_before = file_info_before.get('modified') if file_info_before else 0
+
+                # 3. Convert VFS path to local path for editor
+                local_file_path = get_vfs_local_path(collection, file_path_vfs)
                 
-                if was_modified and file_path.exists():
-                    # File was modified and saved, add to collection
-                    try:
-                        # TODO: Implement resource item creation and addition to collection
-                        click.echo(f"Added resource item: {full_id}")
-                    except Exception as e:
-                        click.echo(f"Error adding item to collection: {e}", err=True)
+                debug_echo(ctx, f"Opening editor for: {local_file_path}")
+                
+                # 4. Open file with git's editor
+                editor = get_editor()
+                subprocess.run([editor, str(local_file_path)], check=True)
+                
+                # 5. Check if file was modified
+                file_info_after = collection._vfs.info(file_path_vfs)
+                mtime_after = file_info_after.get('modified') if file_info_after else 0
+                
+                if mtime_after > mtime_before:
+                    # File was modified, keep the item
+                    click.echo(f"Added resource item: {item_id}")
                 else:
-                    # User canceled or didn't save, delete the file if it exists
-                    if file_path.exists():
-                        try:
-                            os.remove(file_path)
-                            click.echo(f"Canceled: Item {full_id} not created.")
-                        except Exception as e:
-                            click.echo(f"Error removing temporary file: {e}", err=True)
-                    else:
-                        click.echo(f"Canceled: Item {full_id} not created.")
+                    # File was not modified, remove the item
+                    collection.remove_item(item_id)
+                    click.echo(f"Canceled: Item {item_id} not created (no changes made).")
                         
             except Exception as e:
                 click.echo(f"Error in editor: {e}", err=True)
-                if file_path.exists():
-                    try:
-                        os.remove(file_path)
-                    except Exception:
-                        pass
+                # Try to clean up the item if it was created
+                try:
+                    collection.remove_item(item_id)
+                except Exception:
+                    pass
                 ctx.exit(1)
     except Exception as e:
         click.echo(f"Error creating resource item: {e}", err=True)
-        # Clean up if file exists
-        if file_path.exists():
-            try:
-                os.remove(file_path)
-            except Exception:
-                pass
         ctx.exit(1)
