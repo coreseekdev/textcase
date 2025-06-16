@@ -18,6 +18,8 @@
 from pathlib import Path, PurePosixPath
 from typing import Generic, TypeVar, Optional, Tuple, Dict, List, Union, Iterator
 import yaml
+import shutil
+import os
 
 from ..client.vfs_client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection, ResourceItem, ResourceCollectionManager
@@ -55,9 +57,75 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             self._repo_root = repo_root
         
         self._vfs = vfs
+        # self._config_root = self._repo_root / ".config"
         self._config_collections: Dict[str, ConfigCollectionImpl[T]] = {}
+        self._template_collections: Dict[str, ConfigTemplateCollectionImpl[T]] = {}
         self._prefix_to_collection = {}
         self._prefix_list = []
+    
+    def _get_config_source_dir(self, collection_name: str) -> Optional[Path]:
+        """Get the source directory for configuration files.
+        
+        Args:
+            collection_name: Name of the collection (e.g., 'config.agent')
+            
+        Returns:
+            Path to the source directory or None if not found
+        """
+        # Extract the config type from collection name
+        # e.g., 'config.agent' -> 'agent'
+        parts = collection_name.split('.', 1)
+        if len(parts) != 2:
+            return None
+        
+        config_type = parts[1]
+        
+        # Get the package directory (similar to get_template_source_dir)
+        current_file = Path(__file__)
+        package_dir = current_file.parent.parent.parent
+        
+        # Config files are stored in src/data/config/{config_type}
+        config_source_dir = package_dir / "data" / "config" / config_type
+        
+        if config_source_dir.exists() and config_source_dir.is_dir():
+            return config_source_dir
+        
+        return None
+    
+    def _copy_config_files_to_vfs(self, collection_name: str, target_path: PurePosixPath) -> bool:
+        """Copy configuration files from source to VFS.
+        
+        Args:
+            collection_name: Name of the collection
+            target_path: Target path in VFS
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        source_dir = self._get_config_source_dir(collection_name)
+        if not source_dir:
+            return False
+        
+        try:
+            # Copy all files from source directory to VFS
+            copied = 0
+            for source_file in source_dir.iterdir():
+                if source_file.is_file():
+                    target_file_path = target_path / source_file.name
+                    
+                    # Check if file already exists in VFS
+                    if not self._vfs.info(str(target_file_path)):
+                        # Read source file content
+                        with open(source_file, 'rb') as f:
+                            content = f.read()
+                        
+                        # Write to VFS
+                        self._vfs.put(str(target_file_path), content, create_if_missing=True)
+                        copied += 1
+            
+            return copied > 0
+        except Exception:
+            return False
     
     def get_collection(self, name: str) -> Optional[ResourceCollection[T]]:
         """
@@ -119,12 +187,13 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         try:
             if not self._vfs.info(config_path):     # 如果不存在或其他错误（gitfs) , info 返回 None
                 self._vfs.mkdir(config_path, parents=True)
-                # 在此初始化？
+                # 复制默认配置文件到新创建的目录
+                self._copy_config_files_to_vfs(name, config_path)
         except Exception as e:
             # 如果创建目录失败，仍然返回集合对象，但操作可能会失败
             raise ValueError(f"Failed to create config collection directory: {config_path}")
         
-        # 创建集合 ， 自动初始化？
+        # 创建集合
         collection = ConfigCollectionImpl[T](name, config_path, self._vfs)
         self._config_collections[name] = collection
         return collection
@@ -208,44 +277,7 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         return self._get_config_collection("config.agent")
     
     def create_collection(self, name: str, parent: Optional[ResourceCollection[T]] = None) -> ResourceCollection[T]:
-        """Create a new collection.
-        
-        Args:
-            name: Name for the new collection
-            parent: Optional parent collection. If None, creates at root level
-            
-        Returns:
-            The created collection
-            
-        Raises:
-            ValueError: If a collection with the same name already exists or if name is invalid
-        """
-        if not name.startswith("config."):
-            raise ValueError(f"Invalid config collection name: {name}. Must start with 'config.'")
-        
-        if parent is not None:
-            raise ValueError("Config collections do not support parent collections")
-        
-        # 检查是否已存在
-        if name in self._config_collections:
-            raise ValueError(f"Config collection {name} already exists")
-        
-        # 创建新的配置集合
-        parts = name.split(".", 1)
-        if len(parts) != 2:
-            raise ValueError(f"Invalid config collection name: {name}")
-        
-        config_path = self._config_root / parts[1]
-        try:
-            if not self._vfs.exists(str(config_path)):
-                self._vfs.mkdir(str(config_path))
-        except Exception as e:
-            raise ValueError(f"Failed to create config collection directory: {e}")
-        
-        # 创建集合
-        collection = ConfigCollectionImpl[T](name, config_path, self._vfs)
-        self._config_collections[name] = collection
-        return collection
+        raise ValueError("Config collections do not support create collection")
     
     def remove_collection(self, name: str, parent: Optional[ResourceCollection[T]] = None) -> Optional[ResourceCollection[T]]:
         """Remove a collection.
@@ -257,27 +289,7 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         Returns:
             The removed collection, or None if not found
         """
-        if parent is not None:
-            return None  # 配置集合不支持父集合
-        
-        if not name.startswith("config."):
-            return None
-        
-        # 检查是否存在
-        collection = self._get_config_collection(name)
-        if not collection:
-            return None
-        
-        # 从缓存中移除
-        if name in self._config_collections:
-            removed = self._config_collections.pop(name)
-            
-            # 注意：这里不删除实际的目录，因为可能包含重要配置
-            # 如果需要删除目录，应该在这里添加代码
-            
-            return removed
-        
-        return None
+        raise ValueError("Config collections do not support remove collection")
     
     def add_collection(self, collection: ResourceCollection[T], parent: Optional[ResourceCollection[T]] = None) -> None:
         """Add an existing collection to a parent.
@@ -289,19 +301,7 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         Raises:
             ValueError: If a collection with the same name already exists in the parent
         """
-        if parent is not None:
-            raise ValueError("Config collections do not support parent collections")
-        
-        name = collection.name
-        if not name.startswith("config."):
-            raise ValueError(f"Invalid config collection name: {name}. Must start with 'config.'")
-        
-        # 检查是否已存在
-        if name in self._config_collections:
-            raise ValueError(f"Config collection {name} already exists")
-        
-        # 添加到缓存
-        self._config_collections[name] = collection
+        raise ValueError("Config collections do not support add collection")
     
     def move_collection(self, name: str, 
                        from_parent: Optional[ResourceCollection[T]] = None,
@@ -373,7 +373,7 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         for name in self.PREDEFINED_COLLECTIONS:
             parts = name.split(".", 1)
             if len(parts) == 2:
-                config_path = self._config_root / parts[1]
+                config_path = self._repo_root / parts[1]
                 try:
                     if self._vfs.exists(str(config_path)):
                         result.append(name)
@@ -382,8 +382,8 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         
         # 添加动态发现的集合
         try:
-            if self._vfs.exists(str(self._config_root)):
-                dirs = self._vfs.list_dirs(str(self._config_root))
+            if self._vfs.exists(str(self._repo_root)):
+                dirs = self._vfs.list_dirs(str(self._repo_root))
                 for dir_name in dirs:
                     config_name = f"config.{dir_name}"
                     if config_name not in result:
