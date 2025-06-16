@@ -10,6 +10,7 @@ from typing import Any, Dict, Generic, Optional, Set, TypeVar, Union
 from ..client.vfs_client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceItem, ResourceCollection
 from .config import CollectionConfig
+from .collection_tag import TagManager
 
 T = TypeVar('T')
 
@@ -246,7 +247,7 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
         """Load item tags and metadata from tag files."""
         # Load tags by checking which tag files contain this item
         for tag_name in self._config.tags.keys():
-            tag_file_path = self._collection_path / f"{tag_name}.txt"
+            tag_file_path = self._collection_path / f"{tag_name}.{TagManager.TAG_FILE_EXTENSION}"
             try:
                 content = self._vfs.get_text(tag_file_path, encoding='utf-8')
                 if content:
@@ -264,14 +265,21 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
             tag: The tag name
             add: True to add the item, False to remove it
         """
-        tag_file_path = self._collection_path / f"{tag}.txt"
+        # 使用集合配置中定义的标签大小写形式
+        if hasattr(self._collection, 'config') and hasattr(self._collection.config, 'tags'):
+            for defined_tag in self._collection.config.tags:
+                if defined_tag.upper() == tag.upper():
+                    tag = defined_tag
+                    break
+        
+        tag_file_path = self._collection_path / f"{tag}.{TagManager.TAG_FILE_EXTENSION}"
         
         try:
             # Read existing content
             try:
-                content = self._vfs.get_text(tag_file_path, encoding='utf-8')
+                content = self._vfs.get_text(str(tag_file_path), encoding='utf-8')
                 lines = [line.strip() for line in content.splitlines() if line.strip()]
-            except VFSClientException:
+            except Exception:
                 # File doesn't exist
                 lines = []
             
@@ -286,7 +294,7 @@ class ResourceItemImpl(Generic[T], ResourceItem[T]):
             
             # Write back to file
             new_content = '\n'.join(lines) + ('\n' if lines else '')
-            self._vfs.put(tag_file_path, new_content.encode('utf-8'), create_if_missing=True)
+            self._vfs.put(str(tag_file_path), new_content.encode('utf-8'), create_if_missing=True)
             
         except Exception as e:
             raise VFSClientException(

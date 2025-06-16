@@ -16,46 +16,34 @@
 """Tag command implementation."""
 
 import click
-from typing import Optional
-from pathlib import Path
+from typing import List, Optional, Tuple, Set
 
 from textcase.cli.utils import debug_echo
 
 
-@click.group()
+@click.command()
+@click.argument('resource_name')
+@click.argument('tags', nargs=-1, required=False)
+@click.option('-r', '--remove', is_flag=True, help='Remove tags instead of adding them')
 @click.pass_context
-def tag(ctx: click.Context):
+def tag(ctx: click.Context, resource_name: str, tags: tuple, remove: bool):
     """
-    Manage tags for resource items.
+    Add, remove, or list tags for a resource item.
     
-    This command allows you to add, remove, or list tags for resource items.
-    """
-    pass
-
-
-@tag.command('add')
-@click.argument('item_path')
-@click.argument('tags', nargs=-1, required=True)
-@click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
-@click.option('-f', '--force', is_flag=True, help='Force adding tags even if they are not defined')
-@click.pass_context
-def add_tag(ctx: click.Context, item_path: str, tags: tuple, verbose: bool, force: bool = False):
-    """
-    Add tags to a resource item.
+    RESOURCE_NAME is the reference to the resource item (e.g. 'req1').
+    TAGS are one or more tags to add or remove from the resource item.
     
-    ITEM_PATH is the path to the resource item, relative to the repository root.
-    TAGS are one or more tags to add to the resource item.
-    
-    By default, tags must be defined in the collection configuration.
-    Use --force to automatically create undefined tags.
+    If no TAGS are provided, lists all tags for the resource item.
     
     Examples:
-      textcase tag add docs/file1.md important                      # Add a defined tag
-      textcase tag add docs/file1.md important documentation        # Add multiple tags
-      textcase tag add --force docs/file1.md new-tag                # Auto-create tag
+      textcase tag req1                               # List tags for req1
+      textcase tag req1 important documentation        # Add multiple tags
+      textcase tag -r req1 important                   # Remove a tag
     """
     # Get TextCase instance from context
     textcase = ctx.obj.get('textcase')
+    verbose = ctx.obj.get('verbose')
+    
     if not textcase:
         click.echo("Error: No valid TextCase instance found.", err=True)
         ctx.exit(1)
@@ -63,161 +51,115 @@ def add_tag(ctx: click.Context, item_path: str, tags: tuple, verbose: bool, forc
     # Get resource manager
     resource_manager = textcase.resource_manager
     
-    # Resolve item path
-    if not Path(item_path).is_absolute():
-        full_path = Path(textcase.repo_root_path) / item_path
-    else:
-        full_path = Path(item_path)
-    
-    # Check if the item exists
-    if not full_path.exists():
-        click.echo(f"Error: Item '{item_path}' not found.", err=True)
-        ctx.exit(1)
-    
-    # Find the collection that contains this item
+    # 使用 parse_resource_reference 解析资源引用
     collection = None
     item = None
     
-    # TODO: Implement finding the collection and item
-    # For now, just use a placeholder implementation
+    try:
+        collection, item = resource_manager.parse_resource_reference(resource_name, partial=False)
+    except Exception as e:
+        debug_echo(ctx, f"Error parsing resource reference: {e}")
     
-    if verbose:
-        click.echo(f"Adding tags to {item_path}: {', '.join(tags)}")
-    
-    # Add each tag
-    success = True
-    for tag_name in tags:
-        try:
-            # TODO: Implement tag addition
-            # For now, just print a message
-            click.echo(f"Added tag '{tag_name}' to {item_path}")
-        except Exception as e:
-            click.echo(f"Error adding tag '{tag_name}': {e}", err=True)
-            success = False
-    
-    if success:
-        click.echo(f"Successfully added tags to {item_path}")
-    else:
-        click.echo("Some tags could not be added", err=True)
-        ctx.exit(1)
-
-
-@tag.command('remove')
-@click.argument('item_path')
-@click.argument('tags', nargs=-1, required=True)
-@click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
-@click.pass_context
-def remove_tag(ctx: click.Context, item_path: str, tags: tuple, verbose: bool):
-    """
-    Remove tags from a resource item.
-    
-    ITEM_PATH is the path to the resource item, relative to the repository root.
-    TAGS are one or more tags to remove from the resource item.
-    
-    Examples:
-      textcase tag remove docs/file1.md important
-      textcase tag remove docs/file1.md important documentation
-    """
-    # Get TextCase instance from context
-    textcase = ctx.obj.get('textcase')
-    if not textcase:
-        click.echo("Error: No valid TextCase instance found.", err=True)
+    if not collection:
+        click.echo(f"Error: Resource '{resource_name}' not found.", err=True)
         ctx.exit(1)
     
-    # Get resource manager
-    resource_manager = textcase.resource_manager
+    # 获取集合中定义的有效标签
+    valid_tags: Set[str] = set()
+    if collection.config and hasattr(collection.config, 'tags'):
+        valid_tags = set(collection.config.tags)
     
-    # Resolve item path
-    if not Path(item_path).is_absolute():
-        full_path = Path(textcase.repo_root_path) / item_path
-    else:
-        full_path = Path(item_path)
-    
-    # Check if the item exists
-    if not full_path.exists():
-        click.echo(f"Error: Item '{item_path}' not found.", err=True)
-        ctx.exit(1)
-    
-    # Find the collection that contains this item
-    collection = None
-    item = None
-    
-    # TODO: Implement finding the collection and item
-    # For now, just use a placeholder implementation
-    
-    if verbose:
-        click.echo(f"Removing tags from {item_path}: {', '.join(tags)}")
-    
-    # Remove each tag
-    success = True
-    for tag_name in tags:
-        try:
-            # TODO: Implement tag removal
-            # For now, just print a message
-            click.echo(f"Removed tag '{tag_name}' from {item_path}")
-        except Exception as e:
-            click.echo(f"Error removing tag '{tag_name}': {e}", err=True)
-            success = False
-    
-    if success:
-        click.echo(f"Successfully removed tags from {item_path}")
-    else:
-        click.echo("Some tags could not be removed", err=True)
-        ctx.exit(1)
-
-
-@tag.command('list')
-@click.argument('item_path', required=False)
-@click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
-@click.pass_context
-def list_tags(ctx: click.Context, item_path: Optional[str], verbose: bool):
-    """
-    List tags for a resource item or all available tags.
-    
-    If ITEM_PATH is provided, lists tags for that specific resource item.
-    If no ITEM_PATH is provided, lists all available tags in the collections.
-    
-    Examples:
-      textcase tag list                  # List all available tags
-      textcase tag list docs/file1.md    # List tags for a specific item
-    """
-    # Get TextCase instance from context
-    textcase = ctx.obj.get('textcase')
-    if not textcase:
-        click.echo("Error: No valid TextCase instance found.", err=True)
-        ctx.exit(1)
-    
-    # Get resource manager
-    resource_manager = textcase.resource_manager
-    
-    if item_path:
-        # List tags for a specific item
-        # Resolve item path
-        if not Path(item_path).is_absolute():
-            full_path = Path(textcase.repo_root_path) / item_path
+    # 如果只找到集合但没有找到项目，则列出集合可用的标签
+    if not item:
+        if valid_tags:
+            # click.echo(f"Available tags for collection '{collection.name}':")
+            for tag in sorted(valid_tags):
+                click.echo(f"{tag}")
         else:
-            full_path = Path(item_path)
-        
-        # Check if the item exists
-        if not full_path.exists():
-            click.echo(f"Error: Item '{item_path}' not found.", err=True)
-            ctx.exit(1)
-        
-        # Find the collection that contains this item
-        collection = None
-        item = None
-        
-        # TODO: Implement finding the collection and item
-        # For now, just use a placeholder implementation
-        
-        # Get and display tags
-        # TODO: Implement getting item tags
-        # For now, just print a placeholder message
-        click.echo(f"Tags for {item_path}:")
-        click.echo("  - No tags found (placeholder)")
+            click.echo(f"No tags defined for collection '{collection.name}'")
+        return
+    
+    # 获取项目的完整引用，用于显示
+    item_key = collection.get_item_key(item.name)
+    
+    # 如果没有提供标签，则列出项目的所有标签
+    if not tags:
+        item_tags = item.tags
+        if item_tags:
+            # click.echo(f"Tags for {item_key}:")
+            for tag in sorted(item_tags):
+                click.echo(f"{tag}")
+        else:
+            click.echo(f"No tags found for {item_key}")
+        return
+    
+    if verbose:
+        action = "Removing" if remove else "Adding"
+        click.echo(f"{action} tags to {item_key}: {', '.join(tags)}")
+    
+    # 获取集合中定义的有效标签
+    valid_tags: Set[str] = set()
+    if collection.config and hasattr(collection.config, 'tags'):
+        valid_tags = set(collection.config.tags)
+    
+    # 处理每个标签
+    success = True
+    for tag_name in tags:
+        try:
+            # 不区分大小写匹配标签
+            matching_tag = None
+            for valid_tag in valid_tags:
+                if valid_tag.upper() == tag_name.upper():
+                    matching_tag = valid_tag
+                    break
+            
+            # 如果找到匹配的标签，使用集合中定义的大小写形式
+            actual_tag = matching_tag if matching_tag else tag_name
+            
+            # 检查标签是否在集合的有效标签列表中
+            if not matching_tag and not remove:
+                click.echo(f"Warning: Tag '{tag_name}' is not defined in collection '{collection.name}'")
+            
+            if remove:
+                # 移除标签 (不区分大小写)
+                tag_removed = False
+                for existing_tag in list(item.tags):  # 创建副本以便在迭代时修改
+                    if existing_tag.upper() == tag_name.upper():
+                        item.unassign_tag(existing_tag)
+                        click.echo(f"Removed tag '{existing_tag}' from {item_key}")
+                        tag_removed = True
+                
+                if not tag_removed and verbose:
+                    # 如果项目本来就没有这个标签，也正常返回，不报错
+                    click.echo(f"Item {item_key} does not have tag '{tag_name}'")
+            else:
+                # 添加标签 (使用匹配的大小写形式)
+                has_tag = False
+                for existing_tag in item.tags:
+                    if existing_tag.upper() == actual_tag.upper():
+                        has_tag = True
+                        break
+                
+                if has_tag:
+                    if verbose:
+                        click.echo(f"Item {item_key} already has tag '{actual_tag}'")
+                else:
+                    item.assign_tag(actual_tag)
+                    click.echo(f"Added tag '{actual_tag}' to {item_key}")
+        except Exception as e:
+            action = "removing" if remove else "adding"
+            click.echo(f"Error {action} tag '{tag_name}': {e}", err=True)
+            success = False
+    
+    if success:
+        action = "removed from" if remove else "added to"
+        if len(tags) > 0:
+            click.echo(f"Successfully {action} {item_key}")
     else:
-        # List all available tags
-        # TODO: Implement getting all tags
-        # For now, just print a placeholder message
-        click.echo("Available tags:")
-        click.echo("  - No tags defined (placeholder)")
+        action = "remove" if remove else "add"
+        click.echo(f"Some tags could not be {action}d", err=True)
+        ctx.exit(1)
+
+
+
+
