@@ -338,8 +338,11 @@ class AgentFactory(AgentFactoryProtocol):
         """
         try:
             # Get agent collection and item
-            collection, item = self._textcase.resource_manager.parse_resource_reference(f"config.agent.{name}")
-            
+            collection = self._textcase.resource_manager.parse_resource_reference(f"config.agent")
+
+            # Get item
+            item = collection.get_item(name)
+
             if not collection or not item:
                 raise ValueError(f"Agent '{name}' not found")
             
@@ -347,6 +350,7 @@ class AgentFactory(AgentFactoryProtocol):
             content = item.read_content()
             
             # Parse YAML front matter if present
+            # Agent 默认应该是 markdown
             if content.startswith('---\n'):
                 parts = content.split('---\n', 2)
                 if len(parts) >= 2:
@@ -401,8 +405,9 @@ class AgentFactory(AgentFactoryProtocol):
         """
         try:
             # Get provider collection and item
-            collection, item = self._textcase.resource_manager.parse_resource_reference(f"config.provider.{provider_name}")
-            
+            collection = self._textcase.resource_manager.parse_resource_reference(f"config.provider")
+
+            item = collection.get_item(provider_name)
             if not collection or not item:
                 raise ValueError(f"Provider '{provider_name}' not found")
             
