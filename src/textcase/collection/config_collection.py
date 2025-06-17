@@ -76,7 +76,8 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
     
     def _get_file_path(self) -> PurePosixPath:
         """Get the file path for this configuration item."""
-        return self._collection.path / f"{self._name}.yml"
+        extension = self._collection.get_default_extension()
+        return self._collection.path / f"{self._name}{extension}"
     
     def _process_env_vars(self, data: Any, path: str = '') -> None:
         """Process environment variable substitutions in configuration data.
@@ -246,7 +247,8 @@ class ConfigTemplateItemImpl(Generic[T], ResourceItem[T]):
         try:
             for file in self._vfs.list_dir(str(self._collection.path)):
                 if file.endswith('.tmpl'):
-                    template_name = file.split('.')[0]
+                    # Remove the .tmpl extension to get the template name
+                    template_name = file[:-5]  # Remove '.tmpl' suffix
                     if template_name == self._name:
                         return str(self._collection.path / file)
             return None
@@ -278,8 +280,72 @@ class ConfigTemplateItemImpl(Generic[T], ResourceItem[T]):
         Args:
             content: Content to write
         """
-        # 模板项不支持写入操作
-        raise ValueError("Template items do not support write operations")
+        # Template items are read-only, so this method is not implemented
+        raise NotImplementedError("Template items are read-only")
+    
+    @property
+    def tags(self) -> Set[str]:
+        """Get the tags assigned to this item.
+        
+        Template items don't support tags.
+        
+        Returns:
+            Empty set as template items don't have tags
+        """
+        return set()
+    
+    def assign_tag(self, tag: str) -> None:
+        """Assign a tag to this item.
+        
+        Template items don't support tags.
+        
+        Args:
+            tag: Tag name to assign
+        """
+        raise NotImplementedError("Template items don't support tags")
+    
+    def unassign_tag(self, tag: str) -> None:
+        """Remove a tag from this item.
+        
+        Template items don't support tags.
+        
+        Args:
+            tag: Tag name to remove
+        """
+        raise NotImplementedError("Template items don't support tags")
+    
+    def has_tag(self, tag: str) -> bool:
+        """Check if this item has a specific tag.
+
+        Template items don't support tags.
+
+        Args:
+            tag: Tag name to check
+            
+        Returns:
+            False as template items don't have tags
+        """
+        return False
+    
+    def render(self, variables: Dict[str, str] = None) -> str:
+        """Render the template with the given variables.
+        
+        Args:
+            variables: Dictionary of variables to substitute in the template
+            
+        Returns:
+            Rendered template content
+        """
+        content = self.read_content()
+        
+        if variables:
+            # Simple variable substitution using string replacement
+            # Variables are expected to be in the format {{variable_name}}
+            for key, value in variables.items():
+                placeholder = f"{{{{{key}}}}}"
+                content = content.replace(placeholder, value)
+        
+        return content
     
     def get_extension(self) -> str:
         """Get the extension of this item.
@@ -720,7 +786,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
         
         # 如果提供了内容，立即写入
         if content:
-            file_path = self._path / f"{name}.yml"
+            extension = self.get_default_extension()
+            file_path = self._path / f"{name}{extension}"
             self._vfs.put(str(file_path), content.encode('utf-8'), create_if_missing=True)
         
         return item
@@ -739,7 +806,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
             return self._items[name]
         
         # 检查文件是否存在
-        file_path = self._path / f"{name}.yml"
+        extension = self.get_default_extension()
+        file_path = self._path / f"{name}{extension}"
         info = self._vfs.info(str(file_path))
         if info is None:
             return None
@@ -762,7 +830,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
             return True
         
         # 检查文件是否存在
-        file_path = self._path / f"{name}.yml"
+        extension = self.get_default_extension()
+        file_path = self._path / f"{name}{extension}"
         info = self._vfs.info(str(file_path))
         return info is not None
     
@@ -780,7 +849,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
             del self._items[name]
         
         # 删除文件
-        file_path = self._path / f"{name}.yml"
+        extension = self.get_default_extension()
+        file_path = self._path / f"{name}{extension}"
         info = self._vfs.info(str(file_path))
         if info is not None:
             self._vfs.remove(str(file_path))
@@ -794,13 +864,14 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
         Returns:
             List of item names
         """
-        # 列出目录中的所有 .yml 文件
+        # 列出目录中的所有配置文件
         try:
+            extension = self.get_default_extension()
             files = self._vfs.list_dir(str(self._path))
             items = []
             for file in files:
-                if file.endswith(".yml") and not file.endswith(".yml.template"):
-                    items.append(file[:-4])  # 移除 .yml 后缀
+                if file.endswith(extension) and not file.endswith(f"{extension}.template"):
+                    items.append(file[:-len(extension)])  # 移除扩展名后缀
             return items
         except Exception:
             return []
@@ -860,20 +931,18 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
         Args:
             item_name: Name of the new configuration item
             template_name: Name of the template to use
-            variables: Dictionary of variables to substitute in the template
+            variables: Dictionary of variables to substitute in the template (unused, kept for compatibility)
             
         Returns:
-            Newly created configuration item
+            Configuration item (existing or newly created)
             
         Raises:
-            VFSClientException: If the template does not exist or the item already exists
+            VFSClientException: If the template does not exist
         """
         # Check if the item already exists
-        if self.get_item(item_name):
-            raise VFSClientException(
-                'ConfigCreateError',
-                f'Configuration item {item_name} already exists'
-            )
+        existing_item = self.get_item(item_name)
+        if existing_item:
+            return existing_item
         
         # Get the template
         template_item = self.template_collection.get_item(template_name)
@@ -883,20 +952,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
                 f'Template {template_name} does not exist'
             )
         
-        # Render the template
-        content = template_item.render(variables)
+        # Copy template content directly without variable substitution
+        content = template_item.read_content()
         
-        # Create the new configuration file
-        item_path = self._path / f"{item_name}.yml"
-        try:
-            self._vfs.put(str(item_path), content.encode('utf-8'), create_if_missing=True)
-        except Exception as e:
-            raise VFSClientException(
-                'ConfigCreateError',
-                f'Failed to create configuration item {item_name}: {e}'
-            )
-        
-        # Create and cache the new configuration item
-        item = ConfigItemImpl(item_name, self, self._vfs)
-        self._items[item_name] = item
-        return item
+        # Use add_item to create the new item with proper extension handling
+        return self.add_item(item_name, content)

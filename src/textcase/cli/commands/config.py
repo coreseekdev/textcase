@@ -222,7 +222,8 @@ def config_cmd(ctx: click.Context, reference: Optional[str] = None, item_name: O
     
     # 获取项目的文件路径
     if isinstance(collection, ConfigCollectionImpl):
-        file_path = collection.path / f"{item_name}.yml"
+        extension = collection.get_default_extension()
+        file_path = collection.path / f"{item_name}{extension}"
         # 编辑文件
         _edit_config_file(str(file_path))
         click.echo(f"Edited configuration item {item_name}")
