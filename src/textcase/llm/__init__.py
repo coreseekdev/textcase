@@ -22,8 +22,6 @@ from .provider import LLMProvider, LLMResponse
 from .factory import LLMFactory
 from .agent import Agent, AgentFactory
 from .conversation_settings import TextcaseConversationSettings
-from .humbug_provider import HumbugProvider
-from .aiohttp_provider import AIOHttpLLMProvider
 
 __all__ = [
     'LLMProvider',
@@ -32,6 +30,4 @@ __all__ = [
     'Agent',
     'AgentFactory',
     'TextcaseConversationSettings',
-    'HumbugProvider',
-    'AIOHttpLLMProvider'
 ]
