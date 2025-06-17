@@ -59,74 +59,6 @@ def _edit_config_file(file_path: str) -> None:
     except FileNotFoundError:
         click.echo(f"Editor {editor} not found. Set the EDITOR environment variable to your preferred editor.")
 
-
-def _render_config_file(ctx: click.Context, file_path: str) -> None:
-    """Render a configuration file using Jinja2 with environment variables.
-    
-    Args:
-        ctx: Click context
-        file_path: Path to the file to render
-    """
-    try:
-        # Read the template content
-        with open(file_path, 'r', encoding='utf-8') as f:
-            template_content = f.read()
-        
-        # Create Jinja2 environment
-        env = jinja2.Environment(
-            undefined=jinja2.StrictUndefined,
-        )
-        
-        # Parse the template to find all variables
-        try:
-            ast = env.parse(template_content)
-            template_vars = jinja2.meta.find_undeclared_variables(ast)
-        except Exception as e:
-            click.echo(f"Error parsing template: {e}", err=True)
-            return
-        
-        # Create render context from environment variables
-        render_context = {}
-        
-        # Populate variables from environment variables
-        # 优先匹配全大写，如果失败不区分大小写
-        for var in template_vars:
-            value = None
-            
-            # 首先尝试全大写匹配
-            upper_var = var.upper()
-            if upper_var in os.environ:
-                value = os.environ[upper_var]
-            else:
-                # 不区分大小写匹配
-                for env_key, env_value in os.environ.items():
-                    if env_key.upper() == upper_var:
-                        value = env_value
-                        break
-            
-            if value is not None:
-                render_context[var] = value
-        
-        # Render the template
-        try:
-            template = env.from_string(template_content)
-            rendered_content = template.render(**render_context)
-            
-            # Output the rendered content
-            click.echo(rendered_content)
-            
-        except jinja2.exceptions.UndefinedError as e:
-            click.echo(f"Error: Template variable not found in environment: {e}", err=True)
-            click.echo(f"Available variables in template: {', '.join(template_vars)}", err=True)
-        except Exception as e:
-            click.echo(f"Error rendering template: {e}", err=True)
-            
-    except FileNotFoundError:
-        click.echo(f"Configuration file not found: {file_path}", err=True)
-    except Exception as e:
-        click.echo(f"Error reading configuration file: {e}", err=True)
-
-
 def _parse_config_reference(textcase: TextCase, reference: str, partial: bool = False) -> Tuple[Optional[ResourceCollection], Optional[ResourceItem]]:
     """Parse a configuration reference.
     
@@ -299,7 +231,8 @@ def config_cmd(ctx: click.Context, reference: Optional[str] = None, item_name: O
         
         if render:
             # 使用Jinja2渲染模式
-            _render_config_file(ctx, str(local_file_path))
+            rendered_content = item.render()
+            click.echo(rendered_content)
         else:
             # 编辑文件
             _edit_config_file(str(local_file_path))

@@ -18,6 +18,8 @@
 import os
 import re
 import yaml
+import jinja2
+import jinja2.meta
 from pathlib import Path, PurePosixPath
 from typing import Dict, Any, Optional, List, TypeVar, Generic, Union, Iterator, Set
 
@@ -127,6 +129,93 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
             result = result.replace(placeholder, env_value)
         
         return result
+    
+    def render(self, variables: Optional[Dict[str, Any]] = None, use_env: bool = True) -> Optional[str]:
+        """Render the configuration file as a Jinja2 template.
+        
+        Args:
+            variables: Dictionary of variables to substitute in the template.
+                      These variables have priority over environment variables.
+            use_env: Whether to read variables from environment variables.
+                    Defaults to True.
+            
+        Returns:
+            Rendered template content
+            
+        Raises:
+            VFSClientException: If template parsing or rendering fails
+        """
+        try:
+            # Read the template content
+            file_path = self._get_file_path()
+            template_content = self._vfs.get_text(str(file_path), encoding='utf-8')
+            
+            # Create Jinja2 environment
+            env = jinja2.Environment(
+                 undefined=jinja2.StrictUndefined,
+             )
+            
+            # Parse the template to find all variables
+            try:
+                ast = env.parse(template_content)
+                template_vars = jinja2.meta.find_undeclared_variables(ast)
+            except Exception as e:
+                raise VFSClientException(
+                    'TemplateParseError',
+                    f'Error parsing template {file_path}: {e}'
+                )
+            
+            # Create render context
+            render_context = {}
+            
+            # Populate variables from environment variables if use_env is True
+            if use_env:
+                for var in template_vars:
+                    value = None
+                    
+                    # 首先尝试全大写匹配
+                    upper_var = var.upper()
+                    if upper_var in os.environ:
+                        value = os.environ[upper_var]
+                    else:
+                        # 不区分大小写匹配
+                        for env_key, env_value in os.environ.items():
+                            if env_key.upper() == upper_var:
+                                value = env_value
+                                break
+                    
+                    if value is not None:
+                        render_context[var] = value
+            
+            # Override with manually provided variables (higher priority)
+            if variables:
+                render_context.update(variables)
+            
+            # Render the template
+            try:
+                template = env.from_string(template_content)
+                rendered_content = template.render(**render_context)
+                return rendered_content
+                
+            except jinja2.exceptions.UndefinedError as e:
+                raise VFSClientException(
+                    'TemplateRenderError',
+                    f'Template variable not found: {e}. Available variables: {", ".join(template_vars)}'
+                )
+            except Exception as e:
+                raise VFSClientException(
+                    'TemplateRenderError',
+                    f'Error rendering template {file_path}: {e}'
+                )
+                
+        except VFSClientException:
+            raise
+        except Exception as e:
+            raise VFSClientException(
+                'ConfigRenderError',
+                f'Failed to render configuration {file_path}: {e}'
+            )
+        return None
     
     def save(self) -> None:
         """Save configuration data to file."""
