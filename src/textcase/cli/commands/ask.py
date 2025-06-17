@@ -24,7 +24,8 @@ from typing import Optional, Tuple
 import click
 
 from ...textcase import TextCase
-from ...core.llm import LLMFactory, AgentFactory
+from ...llm import LLMFactory, AgentFactory
+
 
 
 def _parse_model_or_agent(model_or_agent: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:

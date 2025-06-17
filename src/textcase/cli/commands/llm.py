@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from ...textcase import TextCase
-from ...core.llm.factory import LLMFactory
-from ...core.llm.agent import AgentFactory
+from ...llm.factory import LLMFactory
+from ...llm.agent import AgentFactory
 from ...collection.config_collection import ConfigItemImpl
 
 

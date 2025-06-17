@@ -51,7 +51,7 @@ except ImportError:
 
 from .conversation_settings import TextcaseConversationSettings
 from .provider import LLMProvider, LLMResponse
-from ...protocol.llm import LLMProviderProtocol, LLMResponseProtocol
+from ..protocol.llm import LLMProviderProtocol, LLMResponseProtocol
 
 logger = logging.getLogger(__name__)
 

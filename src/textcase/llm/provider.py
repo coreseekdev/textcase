@@ -22,7 +22,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, AsyncGenerator
 
-from ...protocol.llm import LLMResponseProtocol, LLMProviderProtocol
+from ..protocol.llm import LLMResponseProtocol, LLMProviderProtocol
 
 
 class LLMResponse(LLMResponseProtocol):

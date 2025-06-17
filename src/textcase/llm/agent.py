@@ -23,7 +23,7 @@ import yaml
 from typing import Dict, List, Optional, Any, AsyncGenerator
 from pathlib import Path
 
-from ...protocol.llm import AgentProtocol, AgentFactoryProtocol, LLMResponseProtocol
+from ..protocol.llm import AgentProtocol, AgentFactoryProtocol, LLMResponseProtocol
 from .factory import LLMFactory
 from .provider import LLMProvider, LLMResponse
 

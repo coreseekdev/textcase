@@ -23,7 +23,7 @@ import logging
 from typing import Dict, List, Optional, Any, Type
 from pathlib import Path
 
-from ...protocol.llm import LLMProviderProtocol
+from ..protocol.llm import LLMProviderProtocol
 from .provider import LLMProvider
 
 logger = logging.getLogger(__name__)
