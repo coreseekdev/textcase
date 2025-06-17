@@ -682,6 +682,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
         super().__init__(name, path, vfs)
         self._template_collection = None  # Lazy initialized
         self._config = None  # Collection configuration
+        self._default_template_name = None  # Lazy initialized
+        self._default_extension = None  # Lazy initialized
         
     def get_next_item_name(self) -> str:
         """Get the next available item name.
@@ -738,7 +740,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
         
         # 检查文件是否存在
         file_path = self._path / f"{name}.yml"
-        if not self._vfs.exists(str(file_path)):
+        info = self._vfs.info(str(file_path))
+        if info is None:
             return None
         
         # 创建配置项
@@ -760,7 +763,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
         
         # 检查文件是否存在
         file_path = self._path / f"{name}.yml"
-        return self._vfs.exists(str(file_path))
+        info = self._vfs.info(str(file_path))
+        return info is not None
     
     def remove_item(self, name: str) -> bool:
         """Remove a configuration item.
@@ -777,7 +781,8 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
         
         # 删除文件
         file_path = self._path / f"{name}.yml"
-        if self._vfs.exists(str(file_path)):
+        info = self._vfs.info(str(file_path))
+        if info is not None:
             self._vfs.remove(str(file_path))
             return True
         
@@ -816,6 +821,38 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
                 self._vfs
             )
         return self._template_collection
+    
+    def get_default_template_name(self) -> Optional[str]:
+        """Get the default template name for this collection.
+        
+        Returns:
+            Default template name if found, None otherwise
+        """
+        if self._default_template_name is None:
+            # 查找默认模板，优先级：default > 第一个可用模板
+            template_names = self.template_collection.list_items()
+            if not template_names:
+                self._default_template_name = None
+                raise ValueError("No template found in collection")
+            for name in template_names:
+                if name.startswith("default"):
+                    # 不应该是 default. 因为有可能没有扩展名
+                    self._default_template_name = name
+                    break
+            if self._default_template_name is None:
+                # 使用第一个可用模板作为默认模板
+                self._default_template_name = template_names[0]
+        return self._default_template_name
+    
+    def get_default_extension(self) -> str:
+        """Get the default file extension for items in this collection.
+        
+        Returns:
+            Default file extension (e.g., '.yml', '.md')
+        """
+        default_template_name = self.get_default_template_name()
+        default_extension = '.'.join(PurePosixPath(default_template_name).suffixes)
+        return default_extension
     
     def create_from_template(self, item_name: str, template_name: str, variables: Dict[str, str] = None) -> ResourceItem[T]:
         """Create a new configuration item from a template.

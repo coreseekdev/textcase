@@ -193,7 +193,7 @@ def config_cmd(ctx: click.Context, reference: Optional[str] = None, item_name: O
             return
         
         # 确定使用哪个模板
-        template_to_use = template_name if template_name else "default"
+        template_to_use = template_name if template_name else collection.get_default_template_name()
         
         # 检查模板是否存在
         template_item = template_collection.get_item(template_to_use)

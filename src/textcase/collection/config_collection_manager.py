@@ -232,7 +232,8 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         # 检查目录是否存在
         config_path = self._config_root / parts[1]
         try:
-            return self._vfs.exists(str(config_path))
+            info = self._vfs.info(str(config_path))
+            return info is not None
         except Exception:
             return False
     
@@ -390,14 +391,16 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             if len(parts) == 2:
                 config_path = self._repo_root / parts[1]
                 try:
-                    if self._vfs.exists(str(config_path)):
+                    info = self._vfs.info(str(config_path))
+                    if info is not None:
                         result.append(name)
                 except Exception:
                     pass
         
         # 添加动态发现的集合
         try:
-            if self._vfs.exists(str(self._repo_root)):
+            info = self._vfs.info(str(self._repo_root))
+            if info is not None:
                 dirs = self._vfs.list_dirs(str(self._repo_root))
                 for dir_name in dirs:
                     config_name = f"config.{dir_name}"
