@@ -68,20 +68,10 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             return self.get_collection(self._root_collection_name)
         return None
     
-    # 处理与 config collection 有关的代码
-    def _get_config_collection(self, name: str) -> Optional[ResourceCollection[T]]:
-        """Get or create a configuration collection.
-        
-        Args:
-            name: Collection name (must start with "config.")
-            
-        Returns:
-            Configuration collection or None if not a valid config collection name
-            
-        Raises:
-            ValueError: If root module is not configured
-        """
-        # 检查是否有根模块配置
+    @property
+    def config_collection_manager(self) -> Optional[ConfigCollectionManagerImpl[T]]:
+        """Get the configuration collection manager."""
+                # 检查是否有根模块配置
         if not self._root_collection_name:
             raise ValueError("Root module not configured. Cannot access config collections.")
             
@@ -97,9 +87,23 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             # 初始化配置集合管理器
             self._config_collection_manager = ConfigCollectionManagerImpl[T](repo_root, self._vfs)
             
-        # 使用管理器获取配置集合
-        return self._config_collection_manager.get_collection(name)
+        return self._config_collection_manager
 
+    # 处理与 config collection 有关的代码
+    def _get_config_collection(self, name: str) -> Optional[ResourceCollection[T]]:
+        """Get or create a configuration collection.
+        
+        Args:
+            name: Collection name (must start with "config.")
+            
+        Returns:
+            Configuration collection or None if not a valid config collection name
+            
+        Raises:
+            ValueError: If root module is not configured
+        """
+        # 使用管理器获取配置集合
+        return self.config_collection_manager.get_collection(name)
 
     def create_collection(
         self,

@@ -24,7 +24,9 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from ...textcase import TextCase
-from ...core.llm import LLMFactory, AgentFactory
+from ...core.llm.factory import LLMFactory
+from ...core.llm.agent import AgentFactory
+from ...collection.config_collection import ConfigItemImpl
 
 
 def _load_yaml_config(file_path: Path) -> Optional[Dict[str, Any]]:
@@ -76,28 +78,37 @@ def _get_provider_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
     """
     providers = {}
     
-    # Get provider config directory
-    config_manager = textcase.get_resource_manager()
-    provider_collections = config_manager.get_template_collections('provider')
+    # Get provider config directory by accessing config collection
+    # This will trigger initialization of _config_collection_manager if needed
+    provider_collections = textcase.resource_manager.get_collection('config.provider')
+    if not provider_collections:
+        return providers
     
-    for collection_name in provider_collections:
+    for collection_name in provider_collections.item_names():
         try:
-            # Get provider config directory
-            provider_dir = Path(textcase.repo_root_path) / 'src' / 'data' / 'config' / 'provider' / collection_name
-            
-            # Look for YAML config files
-            for config_file in provider_dir.glob('*.yml'):
-                if config_file.stem != 'default':
-                    config = _load_yaml_config(config_file)
-                    if config:
-                        providers[config_file.stem] = config
-                        
-            # Also check for .yaml files
-            for config_file in provider_dir.glob('*.yaml'):
-                if config_file.stem != 'default':
-                    config = _load_yaml_config(config_file)
-                    if config:
-                        providers[config_file.stem] = config
+            provider = provider_collections.get_item(collection_name)
+            if isinstance(provider, ConfigItemImpl):
+                # 使用 ConfigItemImpl 接口读取文档数据
+                config_data = provider.data
+                if config_data:
+                    providers[collection_name] = config_data
+            else:
+                # 兼容旧的文件系统读取方式
+                provider_dir = Path(textcase.repo_root_path) / 'src' / 'data' / 'config' / 'provider' / collection_name
+                
+                # Look for YAML config files
+                for config_file in provider_dir.glob('*.yml'):
+                    if config_file.stem != 'default':
+                        config = _load_yaml_config(config_file)
+                        if config:
+                            providers[config_file.stem] = config
+                            
+                # Also check for .yaml files
+                for config_file in provider_dir.glob('*.yaml'):
+                    if config_file.stem != 'default':
+                        config = _load_yaml_config(config_file)
+                        if config:
+                            providers[config_file.stem] = config
         except Exception:
             continue
             
@@ -115,30 +126,39 @@ def _get_agent_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
     """
     agents = {}
     
-    # Get agent config directory
-    config_manager = textcase.get_resource_manager()
-    agent_collections = config_manager.get_template_collections('agent')
+    # Get agent config directory by accessing config collection
+    # This will trigger initialization of _config_collection_manager if needed
+    agent_collections = textcase.resource_manager.get_collection('config.agent')
+    if not agent_collections:
+        return agents
     
-    for collection_name in agent_collections:
+    for collection_name in agent_collections.item_names():
         try:
-            # Get agent config directory
-            agent_dir = Path(textcase.repo_root_path) / 'src' / 'data' / 'config' / 'agent' / collection_name
-            
-            # Look for markdown config files
-            for config_file in agent_dir.glob('*.md'):
-                if config_file.stem != 'default':
-                    config = _load_markdown_config(config_file)
-                    if config:
-                        # Also read the content for prompt preview
-                        try:
-                            import frontmatter
-                            with open(config_file, 'r', encoding='utf-8') as f:
-                                post = frontmatter.load(f)
-                                config['prompt_preview'] = post.content[:200] + '...' if len(post.content) > 200 else post.content
-                        except Exception:
-                            config['prompt_preview'] = 'Unable to read prompt'
-                        
-                        agents[config_file.stem] = config
+            agent = agent_collections.get_item(collection_name)
+            if isinstance(agent, ConfigItemImpl):
+                # 使用 ConfigItemImpl 接口读取文档数据
+                config_data = agent.data
+                if config_data:
+                    agents[collection_name] = config_data
+            else:
+                # 兼容旧的文件系统读取方式
+                agent_dir = Path(textcase.repo_root_path) / 'src' / 'data' / 'config' / 'agent' / collection_name
+                
+                # Look for markdown config files
+                for config_file in agent_dir.glob('*.md'):
+                    if config_file.stem != 'default':
+                        config = _load_markdown_config(config_file)
+                        if config:
+                            # Also read the content for prompt preview
+                            try:
+                                import frontmatter
+                                with open(config_file, 'r', encoding='utf-8') as f:
+                                    post = frontmatter.load(f)
+                                    config['prompt_preview'] = post.content[:200] + '...' if len(post.content) > 200 else post.content
+                            except Exception:
+                                config['prompt_preview'] = 'Unable to read prompt'
+                            
+                            agents[config_file.stem] = config
         except Exception:
             continue
             

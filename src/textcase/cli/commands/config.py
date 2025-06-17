@@ -145,11 +145,12 @@ def config_cmd(ctx: click.Context, reference: Optional[str] = None, item_name: O
         click.echo("Error: No valid TextCase instance found.", err=True)
         ctx.exit(1)
     
-    # 情况 1: 没有参数，列出所有预定义的配置集合
-    if not reference:
-        predefined = ConfigCollectionManagerImpl.PREDEFINED_COLLECTIONS
+    # 情况 1: 没有参数，列出所有可用的配置集合
+    if not reference:        
+        config_manager = textcase.resource_manager.config_collection_manager
+        available_collections = config_manager.list_config_collections()
         # click.echo("Available configuration collections:")
-        for collection_name in predefined:
+        for collection_name in available_collections:
             click.echo(f"{collection_name}")
         return
     

@@ -31,12 +31,7 @@ T = TypeVar('T')
 class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
     """Manager for configuration collections."""
     
-    # 预定义的配置集合名称
-    PREDEFINED_COLLECTIONS = [
-        "config.agent",
-        "config.provider",
-        # 其他预定义的配置集合
-    ]
+    # 配置集合将基于数据目录动态判断，不再使用预定义列表
 
     # 配置集合前缀
     CONFIG_PREFIX = "config."
@@ -179,10 +174,7 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         if collection_name in self._config_collections:
             return self._config_collections[collection_name]
         
-        # 检查是否是预定义的配置集合
-        # if name not in self.PREDEFINED_COLLECTIONS and not self._is_valid_config_collection(name):
-        #    return None
-        # 调整为根据数据文件判断
+        # 根据数据文件判断是否是有效的配置集合
         source_dir = self._get_config_source_dir(name)
         if not source_dir:      # 配置项目没有预制模板，不认为是有效的
             return None
@@ -385,19 +377,23 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
         """
         result = []
         
-        # 添加预定义的集合
-        for name in self.PREDEFINED_COLLECTIONS:
-            parts = name.split(".", 1)
-            if len(parts) == 2:
-                config_path = self._repo_root / parts[1]
-                try:
-                    info = self._vfs.info(str(config_path))
-                    if info is not None:
-                        result.append(name)
-                except Exception:
-                    pass
+        # 基于数据目录动态发现配置集合
+        try:
+            # 获取数据目录路径
+            current_file = Path(__file__)
+            package_dir = current_file.parent.parent.parent
+            data_config_dir = package_dir / "data" / "config"
+            
+            if data_config_dir.exists() and data_config_dir.is_dir():
+                # 遍历数据目录下的子目录
+                for item in data_config_dir.iterdir():
+                    if item.is_dir():
+                        config_name = f"config.{item.name}"
+                        result.append(config_name)
+        except Exception:
+            pass
         
-        # 添加动态发现的集合
+        # 添加动态发现的集合（从repo_root）
         try:
             info = self._vfs.info(str(self._repo_root))
             if info is not None:
