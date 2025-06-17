@@ -217,6 +217,95 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
             )
         return None
     
+    def check_availability(self, variables: Optional[Dict[str, Any]] = None, use_env: bool = True) -> tuple[bool, float, Optional[str]]:
+        """Check if the configuration is available (all required variables are provided).
+        
+        Args:
+            variables: Dictionary of variables to substitute in the template.
+                      These variables have priority over environment variables.
+            use_env: Whether to read variables from environment variables.
+                    Defaults to True.
+            
+        Returns:
+            Tuple of (is_available, availability_score, error_message)
+            - is_available: True if all required variables are available
+            - availability_score: Float between 0.0 and 1.0 indicating partial availability
+            - error_message: Error message if not available, None otherwise
+        """
+        try:
+            # Read the template content
+            file_path = self._get_file_path()
+            template_content = self._vfs.get_text(str(file_path), encoding='utf-8')
+            
+            # Create Jinja2 environment
+            env = jinja2.Environment(
+                 undefined=jinja2.StrictUndefined,
+             )
+            
+            # Parse the template to find all variables
+            try:
+                ast = env.parse(template_content)
+                template_vars = jinja2.meta.find_undeclared_variables(ast)
+            except Exception as e:
+                return False, 0.0, f'Template parsing error: {e}'
+            
+            if not template_vars:
+                # No template variables, always available
+                return True, 1.0, None
+            
+            # Create render context
+            render_context = {}
+            available_vars = set()
+            
+            # Populate variables from environment variables if use_env is True
+            if use_env:
+                for var in template_vars:
+                    value = None
+                    
+                    # 首先尝试全大写匹配
+                    upper_var = var.upper()
+                    if upper_var in os.environ:
+                        value = os.environ[upper_var]
+                    else:
+                        # 不区分大小写匹配
+                        for env_key, env_value in os.environ.items():
+                            if env_key.upper() == upper_var:
+                                value = env_value
+                                break
+                    
+                    if value is not None:
+                        render_context[var] = value
+                        available_vars.add(var)
+            
+            # Override with manually provided variables (higher priority)
+            if variables:
+                for var, value in variables.items():
+                    if var in template_vars:
+                        render_context[var] = value
+                        available_vars.add(var)
+            
+            # Calculate availability score
+            total_vars = len(template_vars)
+            available_count = len(available_vars)
+            availability_score = available_count / total_vars if total_vars > 0 else 1.0
+            
+            # Check if all variables are available
+            missing_vars = template_vars - available_vars
+            if missing_vars:
+                error_msg = f'Missing required variables: {", ".join(sorted(missing_vars))}'
+                return False, availability_score, error_msg
+            
+            # Try to render to make sure everything works
+            try:
+                template = env.from_string(template_content)
+                template.render(**render_context)
+                return True, 1.0, None
+            except Exception as e:
+                return False, availability_score, f'Rendering error: {e}'
+                
+        except Exception as e:
+            return False, 0.0, f'Configuration check error: {e}'
+    
     def save(self) -> None:
         """Save configuration data to file."""
         if self._data is None:

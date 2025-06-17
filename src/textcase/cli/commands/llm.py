@@ -67,14 +67,16 @@ def _load_markdown_config(file_path: Path) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _get_provider_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
+def _get_provider_configs(textcase: TextCase, check_availability: bool = False) -> Dict[str, Dict[str, Any]]:
     """Get all provider configurations.
     
     Args:
         textcase: TextCase instance
+        check_availability: Whether to check provider availability
         
     Returns:
-        Dictionary mapping provider names to their configurations
+        Dictionary mapping provider names to their configurations.
+        If check_availability is True, adds '_availability' key with availability info.
     """
     providers = {}
     
@@ -91,7 +93,16 @@ def _get_provider_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
                 # 使用 ConfigItemImpl 接口读取文档数据
                 config_data = provider.data
                 if config_data:
-                    providers[collection_name] = config_data
+                    providers[collection_name] = config_data.copy()
+                    
+                    # Check availability if requested
+                    if check_availability:
+                        is_available, score, error_msg = provider.check_availability()
+                        providers[collection_name]['_availability'] = {
+                            'available': is_available,
+                            'score': score,
+                            'error': error_msg
+                        }
             else:
                 # 兼容旧的文件系统读取方式
                 provider_dir = Path(textcase.repo_root_path) / 'src' / 'data' / 'config' / 'provider' / collection_name
@@ -102,6 +113,13 @@ def _get_provider_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
                         config = _load_yaml_config(config_file)
                         if config:
                             providers[config_file.stem] = config
+                            # For file-based configs, assume available (no template variables)
+                            if check_availability:
+                                providers[config_file.stem]['_availability'] = {
+                                    'available': True,
+                                    'score': 1.0,
+                                    'error': None
+                                }
                             
                 # Also check for .yaml files
                 for config_file in provider_dir.glob('*.yaml'):
@@ -109,6 +127,13 @@ def _get_provider_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
                         config = _load_yaml_config(config_file)
                         if config:
                             providers[config_file.stem] = config
+                            # For file-based configs, assume available (no template variables)
+                            if check_availability:
+                                providers[config_file.stem]['_availability'] = {
+                                    'available': True,
+                                    'score': 1.0,
+                                    'error': None
+                                }
         except Exception:
             continue
             
@@ -165,44 +190,84 @@ def _get_agent_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
     return agents
 
 
-def _get_available_models(providers: Dict[str, Dict[str, Any]]) -> Dict[str, List[str]]:
-    """Get available models from provider configurations.
+def _get_available_models(textcase, provider_filter=None, include_unavailable=False):
+    """Get all available models from provider configurations.
     
     Args:
-        providers: Provider configurations
+        textcase: Textcase instance
+        provider_filter: Optional provider name to filter by
+        include_unavailable: Whether to include models from unavailable providers
         
     Returns:
-        Dictionary mapping model names to supporting provider names
+        List of model info dictionaries with provider and availability info
     """
-    models = {}
+    # Get provider configs with availability check if needed
+    check_availability = not include_unavailable
+    provider_configs = _get_provider_configs(textcase, check_availability=check_availability)
     
-    for provider_name, config in providers.items():
+    models = []
+    
+    for provider_name, config in provider_configs.items():
+        # Skip if filtering by provider and this isn't the one
+        if provider_filter and provider_name != provider_filter:
+            continue
+            
+        # Check provider availability
+        availability_info = config.get('_availability')
+        if not include_unavailable and availability_info and not availability_info['available']:
+            continue
+            
+        # Determine provider status for display
+        provider_status = ""
+        if availability_info:
+            if availability_info['available']:
+                provider_status = "✅"
+            elif availability_info['score'] > 0:
+                provider_status = "⚠️"
+            else:
+                provider_status = "❌"
+        
+        model_list = []
+        
+        # Handle different model configuration formats
         if 'models' in config:
             if isinstance(config['models'], dict):
-                # New format: models as dict with model configs
-                for model_name in config['models'].keys():
-                    if model_name not in models:
-                        models[model_name] = []
-                    models[model_name].append(provider_name)
+                for model_name, model_config in config['models'].items():
+                    model_info = {
+                        'name': model_name,
+                        'provider': provider_name,
+                        'provider_status': provider_status
+                    }
+                    if isinstance(model_config, dict) and 'description' in model_config:
+                        model_info['description'] = model_config['description']
+                    model_list.append(model_info)
             elif isinstance(config['models'], list):
-                # Old format: models as list
                 for model_name in config['models']:
-                    if model_name not in models:
-                        models[model_name] = []
-                    models[model_name].append(provider_name)
+                    model_list.append({
+                        'name': model_name,
+                        'provider': provider_name,
+                        'provider_status': provider_status
+                    })
         elif 'model' in config:
-            # Single model format
             if isinstance(config['model'], list):
                 for model_name in config['model']:
-                    if model_name not in models:
-                        models[model_name] = []
-                    models[model_name].append(provider_name)
+                    model_list.append({
+                        'name': model_name,
+                        'provider': provider_name,
+                        'provider_status': provider_status
+                    })
             else:
-                model_name = config['model']
-                if model_name not in models:
-                    models[model_name] = []
-                models[model_name].append(provider_name)
-                
+                model_list.append({
+                    'name': config['model'],
+                    'provider': provider_name,
+                    'provider_status': provider_status
+                })
+        
+        models.extend(model_list)
+    
+    # Sort by provider name, then by model name
+    models.sort(key=lambda x: (x['provider'], x['name']))
+    
     return models
 
 
@@ -218,8 +283,9 @@ def llm(ctx):
 
 
 @llm.command()
+@click.option('--check-availability', '-c', is_flag=True, help='Check provider availability based on environment variables')
 @click.pass_context
-def providers(ctx):
+def providers(ctx, check_availability):
     """List all available LLM providers.
     
     Shows all configured LLM providers with their basic information.
@@ -227,7 +293,7 @@ def providers(ctx):
     textcase = ctx.obj['textcase']
     
     try:
-        provider_configs = _get_provider_configs(textcase)
+        provider_configs = _get_provider_configs(textcase, check_availability=check_availability)
         
         if not provider_configs:
             click.echo("No providers configured.")
@@ -238,7 +304,31 @@ def providers(ctx):
         click.echo(f"Found {len(provider_configs)} provider(s):\n")
         
         for provider_name, config in provider_configs.items():
-            click.echo(f"📡 {provider_name}")
+            # Get availability info if checked
+            availability_info = config.get('_availability')
+            
+            # Choose icon based on availability
+            if availability_info:
+                if availability_info['available']:
+                    icon = "✅"
+                    status = "Available"
+                elif availability_info['score'] > 0:
+                    icon = "⚠️"
+                    status = f"Partial ({availability_info['score']:.1%})"
+                else:
+                    icon = "❌"
+                    status = "Unavailable"
+            else:
+                icon = "📡"
+                status = None
+            
+            click.echo(f"{icon} {provider_name}")
+            
+            # Show availability status
+            if status:
+                click.echo(f"   Status: {status}")
+                if not availability_info['available'] and availability_info['error']:
+                    click.echo(f"   Error: {availability_info['error']}")
             
             # Show API base if available
             if 'api_base' in config:
@@ -265,51 +355,57 @@ def providers(ctx):
 
 
 @llm.command()
+@click.option('--provider', '-p', help='Filter models by provider')
+@click.option('--include-unavailable', is_flag=True, help='Include models from unavailable providers')
 @click.pass_context
-def models(ctx):
+def models(ctx, provider, include_unavailable):
     """List all available models.
     
-    Shows all available models with their supporting providers.
+    Shows all models from all providers, or filter by specific provider.
+    By default, models from unavailable providers are hidden unless --include-unavailable is used.
     """
     textcase = ctx.obj['textcase']
     
     try:
-        provider_configs = _get_provider_configs(textcase)
-        available_models = _get_available_models(provider_configs)
+        models = _get_available_models(textcase, provider_filter=provider, include_unavailable=include_unavailable)
         
-        if not available_models:
-            click.echo("No models configured.")
-            click.echo("\nModels are defined in provider configuration files.")
+        if not models:
+            if provider:
+                click.echo(f"No models found for provider '{provider}'.")
+            else:
+                click.echo("No models configured.")
             return
         
-        click.echo(f"Found {len(available_models)} model(s):\n")
+        if provider:
+            click.echo(f"Models for provider '{provider}':\n")
+        else:
+            click.echo(f"Found {len(models)} model(s):\n")
         
-        # Check if there's a default model
-        default_model = None
-        agent_configs = _get_agent_configs(textcase)
-        if 'default' in agent_configs and 'model' in agent_configs['default']:
-            default_model = agent_configs['default']['model']
-        
-        for model_name, supporting_providers in sorted(available_models.items()):
-            is_default = model_name == default_model
-            default_marker = " (default)" if is_default else ""
+        current_provider = None
+        for model_info in models:
+            # Group by provider
+            if model_info['provider'] != current_provider:
+                if current_provider is not None:
+                    click.echo()
+                current_provider = model_info['provider']
+                if not provider:  # Only show provider header if not filtering
+                    # Show provider status if available
+                    provider_status = model_info.get('provider_status', '')
+                    if provider_status:
+                        click.echo(f"📡 {current_provider} {provider_status}:")
+                    else:
+                        click.echo(f"📡 {current_provider}:")
             
-            click.echo(f"🤖 {model_name}{default_marker}")
-            click.echo(f"   Providers: {', '.join(supporting_providers)}")
+            # Show model info
+            model_name = model_info['name']
+            if provider:
+                click.echo(f"  🤖 {model_name}")
+            else:
+                click.echo(f"  🤖 {model_name}")
             
-            # Show model-specific config if available
-            for provider_name in supporting_providers:
-                config = provider_configs.get(provider_name, {})
-                if 'models' in config and isinstance(config['models'], dict):
-                    model_config = config['models'].get(model_name, {})
-                    if model_config:
-                        if 'max_tokens' in model_config:
-                            click.echo(f"   Max Tokens: {model_config['max_tokens']} ({provider_name})")
-                        if 'context_window' in model_config:
-                            click.echo(f"   Context Window: {model_config['context_window']} ({provider_name})")
-                        break
-            
-            click.echo()
+            # Show additional info if available
+            if 'description' in model_info:
+                click.echo(f"     {model_info['description']}")
             
     except Exception as e:
         raise click.ClickException(f"Error listing models: {e}")
@@ -383,7 +479,7 @@ def status(ctx):
     try:
         provider_configs = _get_provider_configs(textcase)
         agent_configs = _get_agent_configs(textcase)
-        available_models = _get_available_models(provider_configs)
+        available_models = _get_available_models(textcase, include_unavailable=True)
         
         click.echo("🔍 LLM System Status\n")
         
