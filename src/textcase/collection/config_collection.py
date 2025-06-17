@@ -238,22 +238,15 @@ class ConfigTemplateItemImpl(Generic[T], ResourceItem[T]):
         """Get the collection this item belongs to."""
         return self._collection
     
-    def _find_template_file(self) -> Optional[str]:
+    @property
+    def template_file(self) -> Optional[str]:
         """Find the template file for this item.
         
         Returns:
             Path to the template file or None if not found
         """
-        try:
-            for file in self._vfs.list_dir(str(self._collection.path)):
-                if file.endswith('.tmpl'):
-                    # Remove the .tmpl extension to get the template name
-                    template_name = file[:-5]  # Remove '.tmpl' suffix
-                    if template_name == self._name:
-                        return str(self._collection.path / file)
-            return None
-        except Exception:
-            return None
+        # 不能使用 with suffix ，改为操作字符串
+        return self._collection.path / f"{self._name}.tmpl"
     
     def read_content(self) -> str:
         """Read the content of this template item.
@@ -262,7 +255,7 @@ class ConfigTemplateItemImpl(Generic[T], ResourceItem[T]):
             Content of the template item
         """
         # 查找并读取模板文件
-        file_path = self._find_template_file()
+        file_path = self.template_file
         if not file_path:
             raise ValueError(f"Template file for '{self._name}' not found")
         
@@ -353,7 +346,7 @@ class ConfigTemplateItemImpl(Generic[T], ResourceItem[T]):
         Returns:
             Extension of the item (without the .tmpl suffix)
         """
-        file_path = self._find_template_file()
+        file_path = self.template_file
         if not file_path:
             return ""
         
@@ -867,13 +860,17 @@ class ConfigCollectionImpl(AbstractConfigCollection[T]):
         # 列出目录中的所有配置文件
         try:
             extension = self.get_default_extension()
-            files = self._vfs.list_dir(str(self._path))
+            files = self._vfs.list(str(self._path))
             items = []
-            for file in files:
-                if file.endswith(extension) and not file.endswith(f"{extension}.template"):
-                    items.append(file[:-len(extension)])  # 移除扩展名后缀
+            extension = self.get_default_extension()
+            for file, entry_type in files:
+                if entry_type == EntryType.DIR:
+                    continue
+
+                if file.suffix == extension:
+                    items.append(file.stem)  # 移除扩展名后缀
             return items
-        except Exception:
+        except Exception as e:
             return []
     
     @property

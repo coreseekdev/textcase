@@ -139,7 +139,7 @@ def config_cmd(ctx: click.Context, reference: Optional[str] = None, item_name: O
     textcase config config.agent my_agent custom_template
     """
     # 获取 TextCase 实例
-    textcase = ctx.obj.get('textcase')
+    textcase: TextCase = ctx.obj.get('textcase')
     verbose = ctx.obj.get('verbose')
     if not textcase:
         click.echo("Error: No valid TextCase instance found.", err=True)
@@ -216,7 +216,7 @@ def config_cmd(ctx: click.Context, reference: Optional[str] = None, item_name: O
             return
     
     # 现在我们有了一个项目（新创建的或已存在的），编辑它
-    if not isinstance(item, ResourceItem):
+    if not item:
         click.echo(f"Cannot edit {item_name}")
         return
     
@@ -225,7 +225,8 @@ def config_cmd(ctx: click.Context, reference: Optional[str] = None, item_name: O
         extension = collection.get_default_extension()
         file_path = collection.path / f"{item_name}{extension}"
         # 编辑文件
-        _edit_config_file(str(file_path))
+        local_file_path = textcase.vfs.to_local_path(file_path)
+        _edit_config_file(str(local_file_path))
         click.echo(f"Edited configuration item {item_name}")
     else:
         click.echo(f"Cannot edit items in {reference}")
