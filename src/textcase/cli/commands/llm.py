@@ -86,12 +86,13 @@ def _get_provider_configs(textcase: TextCase, check_availability: bool = False) 
     if not provider_collections:
         return providers
     
-    for collection_name in provider_collections.item_names():
+    for collection_name in provider_collections.item_names:
         try:
             provider = provider_collections.get_item(collection_name)
             if isinstance(provider, ConfigItemImpl):
                 # 使用 ConfigItemImpl 接口读取文档数据
-                config_data = provider.data
+                config_file = provider.get_file_path()
+                config_data = provider.as_yaml()
                 if config_data:
                     providers[collection_name] = config_data.copy()
                     
@@ -134,7 +135,8 @@ def _get_provider_configs(textcase: TextCase, check_availability: bool = False) 
                                     'score': 1.0,
                                     'error': None
                                 }
-        except Exception:
+        except Exception as e:
+            click.echo(f"Error loading provider config from {config_file}: {e}")
             continue
             
     return providers
@@ -157,7 +159,7 @@ def _get_agent_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
     if not agent_collections:
         return agents
     
-    for collection_name in agent_collections.item_names():
+    for collection_name in agent_collections.item_names:
         try:
             agent = agent_collections.get_item(collection_name)
             if isinstance(agent, ConfigItemImpl):
@@ -297,8 +299,6 @@ def providers(ctx, check_availability):
         
         if not provider_configs:
             click.echo("No providers configured.")
-            click.echo("\nTo add a provider, create a configuration file in:")
-            click.echo("  src/data/config/provider/<collection>/")
             return
         
         click.echo(f"Found {len(provider_configs)} provider(s):\n")

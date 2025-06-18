@@ -29,7 +29,7 @@ class HumbugDriver(LLMProvider):
     This class implements the LLMProviderProtocol interface.
     """
     
-    def __init__(self, provider_name: str, backend_settings: Dict[str, AIBackendSettings]):
+    def __init__(self, provider_name: str, config: Dict[str, Any]):
         """
         Initialize HumbugProvider.
         

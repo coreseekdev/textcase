@@ -18,7 +18,8 @@ This package contains protocol definitions for LLM components including
 providers, agents, and related interfaces.
 """
 
-from .llm import LLMResponseProtocol, LLMProviderProtocol
+from .response import LLMResponseProtocol
+from .provider import LLMProviderProtocol
 from .agent import AgentProtocol, AgentFactoryProtocol
 
 __all__ = [

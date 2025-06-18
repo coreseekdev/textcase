@@ -18,13 +18,13 @@ This module provides the LLMFactory class that handles dynamic loading
 of LLM providers and finding appropriate providers for specific models.
 """
 
-import importlib
 import logging
 from typing import Dict, List, Optional, Any, Type
-from pathlib import Path
 
-from ..protocol.llm import LLMProviderProtocol
+from ..proto.resource_collection_protocol import ResourceCollectionManager
 from .provider import LLMProvider
+from ..collection.config_collection import ConfigItemImpl
+
 
 logger = logging.getLogger(__name__)
 
@@ -36,112 +36,53 @@ class LLMFactory:
     of available providers and their supported models.
     """
     
-    def __init__(self):
+    def __init__(self, resource_manager: ResourceCollectionManager):
         """Initialize the LLM factory."""
+        """
+            暂时规定，每次 provider 配置改变，均需要重启整个系统。
+            
+            因此，与 provider 相关的初始化，可以在 init 阶段完成
+        """
         self._providers: Dict[str, LLMProvider] = {}
-        self._provider_classes: Dict[str, Type[LLMProvider]] = {}
-        self._model_to_provider: Dict[str, str] = {}
-        
-        # Register built-in providers
-        self._register_builtin_providers()
-    
-    def _register_builtin_providers(self) -> None:
-        """Register built-in provider classes."""
-        try:
-            # Try to import and register HumbugProvider
-            from .humbug_provider import HumbugProvider
-            self._provider_classes['humbug'] = HumbugProvider
-            logger.debug("Registered HumbugProvider")
-        except ImportError as e:
-            logger.warning(f"Could not import HumbugProvider: {e}")
-        
-        try:
-            # Register AIOHttpLLMProvider
-            from .aiohttp_provider import AIOHttpLLMProvider
-            self._provider_classes['aiohttp'] = AIOHttpLLMProvider
-            logger.debug("Registered AIOHttpLLMProvider")
-        except ImportError as e:
-            logger.warning(f"Could not import AIOHttpLLMProvider: {e}")
-    
-    def register_provider_class(self, name: str, provider_class: Type[LLMProvider]) -> None:
-        """Register a provider class.
-        
-        Args:
-            name: Provider name
-            provider_class: Provider class
-        """
-        self._provider_classes[name] = provider_class
-        logger.debug(f"Registered provider class: {name}")
-    
-    def create_provider(self, provider_name: str, config: Dict[str, Any]) -> LLMProvider:
-        """Create a provider instance from configuration.
-        
-        Args:
-            provider_name: Name of the provider
-            config: Provider configuration
-            
-        Returns:
-            Provider instance
-            
-        Raises:
-            ValueError: If provider is not found or configuration is invalid
-        """
-        if provider_name in self._providers:
-            logger.debug(f"Returning existing provider instance: {provider_name}")
-            return self._providers[provider_name]
-        
-        # Find provider class
-        provider_class = self._find_provider_class(provider_name)
-        if not provider_class:
-            raise ValueError(f"Provider '{provider_name}' not found")
-        
-        try:
-            # Create provider instance
-            logger.info(f"Creating provider instance: {provider_name}")
-            provider = provider_class.from_config(config)
-            
-            # Cache the provider
-            self._providers[provider_name] = provider
-            
-            # Update model-to-provider mapping
-            for model in provider.supported_models:
-                self._model_to_provider[model] = provider_name
-            
-            logger.info(f"Successfully created provider: {provider_name}")
-            return provider
-            
-        except Exception as e:
-            logger.error(f"Failed to create provider '{provider_name}': {e}")
-            raise ValueError(f"Failed to create provider '{provider_name}': {e}")
-    
-    def _find_provider_class(self, provider_name: str) -> Optional[Type[LLMProvider]]:
-        """Find provider class by name.
-        
-        Args:
-            provider_name: Name of the provider
-            
-        Returns:
-            Provider class or None if not found
-        """
-        # Check registered classes first
-        if provider_name in self._provider_classes:
-            return self._provider_classes[provider_name]
-        
-        # Try dynamic import for common providers
-        try:
-            if provider_name.lower() == 'humbug':
-                from .humbug_provider import HumbugProvider
-                self._provider_classes[provider_name] = HumbugProvider
-                return HumbugProvider
-            elif provider_name.lower() == 'aiohttp':
-                from .aiohttp_provider import AIOHttpLLMProvider
-                self._provider_classes[provider_name] = AIOHttpLLMProvider
-                return AIOHttpLLMProvider
-        except ImportError:
-            pass
-        
+        self._model_to_provider: Dict[str, List[str]] = {}
+
+        provider_collections = resource_manager.get_collection('config.provider')
+        if not provider_collections:
+            raise ValueError("No provider configuration found")
+        for provider_name in provider_collections.item_names:
+            provider = provider_collections.get_item(provider_name)
+            if isinstance(provider, ConfigItemImpl):
+                
+                # 使用 ConfigItemImpl 接口读取数据
+                config_data = provider.as_yaml()
+                if config_data is None:
+                    logger.error(f"Failed to load provider configuration: {provider_name}")
+                    continue
+
+                provider_driver = self.get_llm_driver_by_type(config_data.get('type', 'openai'))
+
+                provider = provider_driver.from_config(config_data)
+
+                if provider is None:
+                    logger.error(f"Failed to load provider: {provider_name}")
+                    continue
+
+                self._providers[provider.provider_name] = provider
+                for model in provider.supported_models:
+                    if model in self._model_to_provider:
+                        self._model_to_provider[model].append(provider_name)
+                    else:
+                        self._model_to_provider[model] = [provider_name, ]
+        # for provider_name
+
+    @classmethod
+    def get_llm_driver_by_type(cls, driver_name: str):
+        if driver_name == 'openai':
+            from .humbug_driver import HumbugDriver
+            # from .aiohttp_provider import AIOHttpLLMProvider
+            return HumbugDriver
         return None
-    
+
     def get_provider(self, provider_name: str) -> Optional[LLMProvider]:
         """Get an existing provider instance.
         
@@ -153,7 +94,7 @@ class LLMFactory:
         """
         return self._providers.get(provider_name)
     
-    def find_provider_for_model(self, model: str) -> Optional[str]:
+    def find_provider_for_model(self, model: str) -> List[str]:
         """Find a provider that supports the given model.
         
         Args:
@@ -166,29 +107,7 @@ class LLMFactory:
         if model in self._model_to_provider:
             return self._model_to_provider[model]
         
-        # Check all loaded providers
-        for provider_name, provider in self._providers.items():
-            if provider.supports_model(model):
-                self._model_to_provider[model] = provider_name
-                return provider_name
-        
-        return None
-    
-    def list_providers(self) -> List[str]:
-        """List all available provider names.
-        
-        Returns:
-            List of provider names
-        """
-        return list(self._provider_classes.keys())
-    
-    def list_loaded_providers(self) -> List[str]:
-        """List all loaded provider instances.
-        
-        Returns:
-            List of loaded provider names
-        """
-        return list(self._providers.keys())
+        return []
     
     def list_supported_models(self, provider_name: Optional[str] = None) -> List[str]:
         """List supported models.
@@ -210,16 +129,10 @@ class LLMFactory:
         
         return sorted(list(models))
     
-    def clear_cache(self) -> None:
-        """Clear the provider cache."""
-        self._providers.clear()
-        self._model_to_provider.clear()
-        logger.debug("Cleared provider cache")
-    
     def __repr__(self) -> str:
         """String representation of the factory.
         
         Returns:
             String representation
         """
-        return f"LLMFactory(providers={list(self._providers.keys())}, classes={list(self._provider_classes.keys())})"
+        return f"LLMFactory(providers={list(self._providers.keys())})"

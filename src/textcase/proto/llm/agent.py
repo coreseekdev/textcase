@@ -20,7 +20,7 @@ agent interfaces and factory interfaces.
 
 from typing import Protocol, AsyncGenerator, Dict, Any, Optional, List
 from abc import abstractmethod
-from .llm import LLMResponseProtocol
+from .response import LLMResponseProtocol
 
 
 class AgentProtocol(Protocol):

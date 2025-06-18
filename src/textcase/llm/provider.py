@@ -17,12 +17,10 @@
 This module contains the base classes for LLM providers and response objects.
 """
 
-import os
-import re
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, AsyncGenerator
 
-from ..protocol.llm import LLMResponseProtocol, LLMProviderProtocol
+from src.textcase.proto.llm import LLMResponseProtocol, LLMProviderProtocol
 
 
 class LLMResponse(LLMResponseProtocol):
@@ -183,34 +181,3 @@ class LLMProvider(ABC, LLMProviderProtocol):
             Provider instance
         """
         pass
-    
-    @staticmethod
-    def parse_template_variables(text: str) -> str:
-        """Parse template variables in text.
-        
-        Replaces ${VAR_NAME} patterns with environment variable values.
-        
-        Args:
-            text: Text containing template variables
-            
-        Returns:
-            Text with variables replaced
-        """
-        def replace_var(match):
-            var_name = match.group(1)
-            return os.environ.get(var_name, match.group(0))
-        
-        return re.sub(r'\$\{([^}]+)\}', replace_var, text)
-    
-    @staticmethod
-    def get_env_var(var_name: str, default: Optional[str] = None) -> Optional[str]:
-        """Get environment variable value.
-        
-        Args:
-            var_name: Environment variable name
-            default: Default value if variable not found
-            
-        Returns:
-            Environment variable value or default
-        """
-        return os.environ.get(var_name, default)

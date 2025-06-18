@@ -17,6 +17,7 @@
 
 import os
 import re
+from jinja2.runtime import str_join
 import yaml
 import jinja2
 import jinja2.meta
@@ -45,7 +46,7 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
         self._name = name
         self._collection = collection
         self._vfs = vfs
-        self._data = None
+        self._content = None
         self._tags = set()  # Empty tags set - not supported for config items
     
     @property
@@ -54,29 +55,29 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
         return self._name
     
     @property
-    def data(self) -> Optional[Dict[str, Any]]:
-        """Get the configuration data for this item."""
-        if self._data is None:
-            self._load_data()
-        return self._data
-    
-    def _load_data(self) -> None:
-        """Load configuration data from file."""
+    def content(self) -> Optional[str_join]:
+        """Get the configuration content for this item."""
+        return self._load_content()
+
+    def as_yaml(self) -> Optional[Dict[str, Any]]:
         try:
-            file_path = self._get_file_path()
+            return yaml.safe_load(self.content)
+        except yaml.YAMLError as exc:
+            return None
+
+    def _load_content(self) -> None:
+        """Load configuration content from file."""
+        try:
+            file_path = self.get_file_path()
             content = self._vfs.get_text(str(file_path), encoding='utf-8')
-            self._data = yaml.safe_load(content)
-            
-            # Process environment variable substitutions
-            if self._data:
-                self._process_env_vars(self._data)
         except Exception as e:
             raise VFSClientException(
                 'ConfigLoadError',
                 f'Failed to load configuration from {file_path}: {e}'
             )
+        return content
     
-    def _get_file_path(self) -> PurePosixPath:
+    def get_file_path(self) -> PurePosixPath:
         """Get the file path for this configuration item."""
         extension = self._collection.get_default_extension()
         return self._collection.path / f"{self._name}{extension}"
@@ -147,8 +148,10 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
         """
         try:
             # Read the template content
-            file_path = self._get_file_path()
-            template_content = self._vfs.get_text(str(file_path), encoding='utf-8')
+            # file_path = self._get_file_path()
+            template_content = self.content
+            if template_content is None:
+                return None
             
             # Create Jinja2 environment
             env = jinja2.Environment(
@@ -234,8 +237,10 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
         """
         try:
             # Read the template content
-            file_path = self._get_file_path()
-            template_content = self._vfs.get_text(str(file_path), encoding='utf-8')
+            # file_path = self._get_file_path()
+            template_content = self.content
+            if template_content is None:
+                return False, 0.0, 'Template content is None'
             
             # Create Jinja2 environment
             env = jinja2.Environment(
@@ -306,72 +311,20 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
         except Exception as e:
             return False, 0.0, f'Configuration check error: {e}'
     
-    def save(self) -> None:
+    def save(self, content= "") -> None:
         """Save configuration data to file."""
-        if self._data is None:
-            return
-        
+        if content is None:
+            content= ""
+
         try:
-            file_path = self._get_file_path()
-            content = yaml.dump(self._data, default_flow_style=False)
+            file_path = self.get_file_path()
             self._vfs.put(str(file_path), content.encode('utf-8'), create_if_missing=True)
         except Exception as e:
             raise VFSClientException(
                 'ConfigSaveError',
                 f'Failed to save configuration to {file_path}: {e}'
             )
-    
-    def get_config_value(self, key_path: str) -> Any:
-        """Get a configuration value using dot notation path.
-        
-        Args:
-            key_path: Dot-separated path to the configuration value
-            
-        Returns:
-            Configuration value or None if not found
-        """
-        if self._data is None:
-            self._load_data()
-        
-        if not key_path:
-            return self._data
-        
-        current = self._data
-        for key in key_path.split('.'):
-            if not isinstance(current, dict) or key not in current:
-                return None
-            current = current[key]
-        
-        return current
-    
-    def set_config_value(self, key_path: str, value: Any) -> None:
-        """Set a configuration value using dot notation path.
-        
-        Args:
-            key_path: Dot-separated path to the configuration value
-            value: Value to set
-        """
-        if self._data is None:
-            self._load_data()
-            if self._data is None:
-                self._data = {}
-        
-        if not key_path:
-            self._data = value
-            return
-        
-        keys = key_path.split('.')
-        current = self._data
-        
-        # Navigate to the parent of the target key
-        for i, key in enumerate(keys[:-1]):
-            if key not in current or not isinstance(current[key], dict):
-                current[key] = {}
-            current = current[key]
-        
-        # Set the value
-        current[keys[-1]] = value
-    
+
     # Tag operations - not supported for config items
     def assign_tag(self, tag: str) -> None:
         """Config items do not support tags."""
@@ -574,6 +527,7 @@ class AbstractConfigCollection(Generic[T], ResourceCollection[T]):
         """
         return item_id
     
+    @property
     def item_names(self) -> List[str]:
         """Get all item names.
         

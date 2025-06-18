@@ -500,7 +500,7 @@ class ResourceCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             # 仅在 partial 模式下才尝试查找以此名称开头的项目
             if partial:
                 # 获取所有项目名称并排序，确保结果一致
-                item_names = sorted(collection.list_items())
+                item_names = sorted(collection.list_items)
                 for existing_item_name in item_names:
                     if existing_item_name.startswith(item_name):
                         item = collection.get_item(existing_item_name)

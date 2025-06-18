@@ -174,7 +174,7 @@ def ask(ctx, prompt: str, model: Optional[str], stream: bool, temperature: Optio
         textcase ask "Be creative" -m gpt-4 -t 1.2 --max-tokens 500
     """
     # Get TextCase instance from context
-    textcase = ctx.obj['textcase']
+    textcase: TextCase = ctx.obj['textcase']
     
     # Validate temperature
     if temperature is not None and (temperature < 0.0 or temperature > 2.0):
@@ -196,7 +196,7 @@ def ask(ctx, prompt: str, model: Optional[str], stream: bool, temperature: Optio
         textcase.start_services()
         
         # Create LLM factory
-        llm_factory = LLMFactory()
+        llm_factory = LLMFactory(textcase.resource_manager)
         
         # Create agent factory
         agent_factory = AgentFactory(llm_factory, textcase)

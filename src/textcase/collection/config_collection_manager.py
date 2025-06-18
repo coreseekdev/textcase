@@ -258,7 +258,7 @@ class ConfigCollectionManagerImpl(Generic[T], ResourceCollectionManager[T]):
             
             if partial:
                 # 支持部分匹配
-                item_names = sorted(collection.list_items())
+                item_names = sorted(collection.list_items)
                 for existing_item_name in item_names:
                     if existing_item_name.startswith(item_name):
                         item = collection.get_item(existing_item_name)

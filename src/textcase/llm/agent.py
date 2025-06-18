@@ -21,11 +21,10 @@ LLM agents with specific configurations and system prompts.
 import logging
 import yaml
 from typing import Dict, List, Optional, Any, AsyncGenerator
-from pathlib import Path
 
-from ..protocol.llm import AgentProtocol, AgentFactoryProtocol, LLMResponseProtocol
+from src.textcase.proto.llm import AgentProtocol, AgentFactoryProtocol, LLMResponseProtocol
 from .factory import LLMFactory
-from .provider import LLMProvider, LLMResponse
+from .provider import LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -386,13 +385,8 @@ class AgentFactory(AgentFactoryProtocol):
         if provider:
             return provider
         
-        # Load provider configuration and create instance
-        try:
-            provider_config = self._load_provider_config(provider_name)
-            return self._llm_factory.create_provider(provider_name, provider_config)
-        except Exception as e:
-            logger.error(f"Failed to get or create provider '{provider_name}': {e}")
-            raise
+        # 暂时不支持动态创建 provider
+        raise NotImplementedError
     
     def _load_provider_config(self, provider_name: str) -> Dict[str, Any]:
         """Load provider configuration from file.
