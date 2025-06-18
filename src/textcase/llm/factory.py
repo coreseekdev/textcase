@@ -54,6 +54,11 @@ class LLMFactory:
             if isinstance(provider, ConfigItemImpl):
                 
                 # 使用 ConfigItemImpl 接口读取数据
+                is_available, score, error_msg = provider.check_availability()
+                if not is_available:
+                    logger.error(f"Provider Not Available {provider_name}: {error_msg}")
+                    continue
+
                 config_data = provider.as_yaml()
                 if config_data is None:
                     logger.error(f"Failed to load provider configuration: {provider_name}")

@@ -59,9 +59,10 @@ class ConfigItemImpl(Generic[T], ResourceItem[T]):
         """Get the configuration content for this item."""
         return self._load_content()
 
-    def as_yaml(self) -> Optional[Dict[str, Any]]:
+    def as_yaml(self, variables: Optional[Dict[str, Any]] = None, use_env: bool = True) -> Optional[Dict[str, Any]]:
         try:
-            return yaml.safe_load(self.content)
+            render_context = self.render(variables, use_env)
+            return yaml.safe_load(render_context)
         except yaml.YAMLError as exc:
             return None
 

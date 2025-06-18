@@ -106,35 +106,7 @@ def _get_provider_configs(textcase: TextCase, check_availability: bool = False) 
                         }
             else:
                 # 兼容旧的文件系统读取方式
-                provider_dir = Path(textcase.repo_root_path) / 'src' / 'data' / 'config' / 'provider' / collection_name
-                
-                # Look for YAML config files
-                for config_file in provider_dir.glob('*.yml'):
-                    if config_file.stem != 'default':
-                        config = _load_yaml_config(config_file)
-                        if config:
-                            providers[config_file.stem] = config
-                            # For file-based configs, assume available (no template variables)
-                            if check_availability:
-                                providers[config_file.stem]['_availability'] = {
-                                    'available': True,
-                                    'score': 1.0,
-                                    'error': None
-                                }
-                            
-                # Also check for .yaml files
-                for config_file in provider_dir.glob('*.yaml'):
-                    if config_file.stem != 'default':
-                        config = _load_yaml_config(config_file)
-                        if config:
-                            providers[config_file.stem] = config
-                            # For file-based configs, assume available (no template variables)
-                            if check_availability:
-                                providers[config_file.stem]['_availability'] = {
-                                    'available': True,
-                                    'score': 1.0,
-                                    'error': None
-                                }
+                raise NotImplemented
         except Exception as e:
             click.echo(f"Error loading provider config from {config_file}: {e}")
             continue
@@ -167,25 +139,6 @@ def _get_agent_configs(textcase: TextCase) -> Dict[str, Dict[str, Any]]:
                 config_data = agent.data
                 if config_data:
                     agents[collection_name] = config_data
-            else:
-                # 兼容旧的文件系统读取方式
-                agent_dir = Path(textcase.repo_root_path) / 'src' / 'data' / 'config' / 'agent' / collection_name
-                
-                # Look for markdown config files
-                for config_file in agent_dir.glob('*.md'):
-                    if config_file.stem != 'default':
-                        config = _load_markdown_config(config_file)
-                        if config:
-                            # Also read the content for prompt preview
-                            try:
-                                import frontmatter
-                                with open(config_file, 'r', encoding='utf-8') as f:
-                                    post = frontmatter.load(f)
-                                    config['prompt_preview'] = post.content[:200] + '...' if len(post.content) > 200 else post.content
-                            except Exception:
-                                config['prompt_preview'] = 'Unable to read prompt'
-                            
-                            agents[config_file.stem] = config
         except Exception:
             continue
             

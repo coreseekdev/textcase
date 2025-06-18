@@ -194,6 +194,13 @@ class HumbugDriver(LLMProvider):
                 # logger.info(f"[{request_id}] Final usage: {usage}")
                 pass 
                     
+        except GeneratorExit:
+            # Handle GeneratorExit gracefully - this happens when the generator is closed
+            # before completion, which is normal behavior in some cases
+            end_time = asyncio.get_event_loop().time()
+            duration = end_time - start_time
+            # logger.debug(f"[{request_id}] Generator closed during LLM request after {duration:.2f}s")
+            return LLMResponse("", LLMUsage(0, 0, 0))
         except Exception as e:
             end_time = asyncio.get_event_loop().time()
             duration = end_time - start_time
@@ -361,6 +368,13 @@ class HumbugDriver(LLMProvider):
             # logger.info(f"[{request_id}] Streaming completed in {duration:.2f}s")
             # logger.info(f"[{request_id}] Received {chunk_count} chunks, yielded {total_yielded_chars} chars")
             
+        except GeneratorExit:
+            # Handle GeneratorExit gracefully - this happens when the generator is closed
+            # before completion, which is normal behavior in some cases
+            end_time = asyncio.get_event_loop().time()
+            duration = end_time - start_time
+            # logger.debug(f"[{request_id}] Generator closed after {duration:.2f}s")
+            return
         except Exception as e:
             end_time = asyncio.get_event_loop().time()
             duration = end_time - start_time
