@@ -120,6 +120,36 @@ class VFSServer:
         except Exception as e:
             return error_result_from_exception(e)
     
+    def exists(self, path: str) -> ResultOrError[bool]:
+        """Check if a path exists.
+        
+        Args:
+            path: Path to check
+            
+        Returns:
+            True if path exists, False otherwise, or ErrorResult if operation failed
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.exists(posix_path)
+        except Exception as e:
+            return error_result_from_exception(e)
+    
+    def is_file(self, path: str) -> ResultOrError[bool]:
+        """Check if a path is a file.
+        
+        Args:
+            path: Path to check
+            
+        Returns:
+            True if path is a file, False otherwise, or ErrorResult if operation failed
+        """
+        try:
+            posix_path = self._convert_path(path)
+            return self._vfs.is_file(posix_path)
+        except Exception as e:
+            return error_result_from_exception(e)
+    
     def get(self, path: str) -> ResultOrError[bytes]:
         """Get file contents.
         
