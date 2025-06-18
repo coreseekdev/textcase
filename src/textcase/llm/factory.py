@@ -67,7 +67,8 @@ class LLMFactory:
                     logger.error(f"Failed to load provider: {provider_name}")
                     continue
 
-                self._providers[provider.provider_name] = provider
+                # 注意：provider.provider_name 的语义上类似 driver_name， 应使用配置文件中的 provider_name
+                self._providers[provider_name] = provider
                 for model in provider.supported_models:
                     if model in self._model_to_provider:
                         self._model_to_provider[model].append(provider_name)

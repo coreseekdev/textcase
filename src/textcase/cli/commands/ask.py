@@ -72,60 +72,57 @@ async def _generate_response(
         temperature: Temperature setting
         max_tokens: Maximum tokens
     """
-    try:
-        # Prepare kwargs
-        kwargs = {}
-        if temperature is not None:
-            kwargs['temperature'] = temperature
-        if max_tokens is not None:
-            kwargs['max_tokens'] = max_tokens
-        
-        # Try to create agent by name first
-        agent = None
-        if agent_name and agent_factory.agent_exists(agent_name):
-            click.echo(f"Using agent: {agent_name}", err=True)
-            agent = agent_factory.create_agent(agent_name, **kwargs)
-        elif model:
-            # Create agent with specific model
-            click.echo(f"Using model: {model}", err=True)
-            if provider:
-                click.echo(f"Using provider: {provider}", err=True)
-            agent = agent_factory.create_agent_with_model(model, provider, **kwargs)
-        else:
-            raise click.ClickException("Must specify either a valid agent name or model")
-        
-        if stream:
-            # Streaming response
-            click.echo(f"Streaming response from {agent.model}...", err=True)
-            click.echo("", err=True)  # Empty line
-            
-            async for chunk in agent.generate_stream(prompt, **kwargs):
-                click.echo(chunk, nl=False)
-            
-            click.echo("")  # Final newline
-        else:
-            # Non-streaming response
-            click.echo(f"Generating response from {agent.model}...", err=True)
-            click.echo("", err=True)  # Empty line
-            
-            response = await agent.generate(prompt, **kwargs)
-            click.echo(response.content)
-            
-            # Show metadata if available
-            if response.metadata:
-                click.echo("", err=True)
-                click.echo(f"Model: {response.model}", err=True)
-                click.echo(f"Provider: {response.provider}", err=True)
-                
-                # Show token usage if available
-                if 'usage' in response.metadata:
-                    usage = response.metadata['usage']
-                    if isinstance(usage, dict):
-                        for key, value in usage.items():
-                            click.echo(f"{key}: {value}", err=True)
-    
-    except Exception as e:
-        raise click.ClickException(f"Error generating response: {e}")
+    # Prepare kwargs
+    kwargs = {}
+    if temperature is not None:
+        kwargs['temperature'] = temperature
+    if max_tokens is not None:
+        kwargs['max_tokens'] = max_tokens
+
+    # Try to create agent by name first
+    agent = None
+    if agent_name and agent_factory.agent_exists(agent_name):
+        click.echo(f"Using agent: {agent_name}", err=True)
+        agent = agent_factory.create_agent(agent_name, **kwargs)
+    elif model:
+        # Create agent with specific model
+        click.echo(f"Using model: {model}", err=True)
+        if provider:
+            click.echo(f"Using provider: {provider}", err=True)
+        agent = agent_factory.create_agent_with_model(model, provider, **kwargs)
+    else:
+        raise click.ClickException("Must specify either a valid agent name or model")
+
+    if stream:
+        # Streaming response
+        click.echo(f"Streaming response from {agent.model}...", err=True)
+        click.echo("", err=True)  # Empty line
+
+        async for chunk in agent.generate_stream(prompt, **kwargs):
+            click.echo(chunk, nl=False)
+
+        click.echo("")  # Final newline
+    else:
+        # Non-streaming response
+        click.echo(f"Generating response from {agent.model}...", err=True)
+        click.echo("", err=True)  # Empty line
+
+        response = await agent.generate(prompt, **kwargs)
+        click.echo(response.content)
+
+        # Show metadata if available
+        if response.metadata:
+            click.echo("", err=True)
+            click.echo(f"Model: {response.model}", err=True)
+            click.echo(f"Provider: {response.provider}", err=True)
+
+            # Show token usage if available
+            if 'usage' in response.metadata:
+                usage = response.metadata['usage']
+                if isinstance(usage, dict):
+                    for key, value in usage.items():
+                        click.echo(f"{key}: {value}", err=True)
+
 
 
 @click.command()
