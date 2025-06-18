@@ -105,12 +105,17 @@ class TextcaseConversationSettings(AIConversationSettings):
             logger.debug(f"Creating dynamic model configuration for: {model}")
             
             # Create a dynamic model definition
+            if reasoning:
+                reasoning_mode = ReasoningCapability.VISIBLE_REASONING
+            else:
+                reasoning_mode = ReasoningCapability.NO_REASONING
             dynamic_model = AIModel(
                 name=model,
+                provider="auto",  # Let the backend determine the provider
                 context_window=context_window or 4096,  # Default context window
                 max_output_tokens=max_output_tokens or max_tokens or 2048,  # Default max output
-                reasoning=reasoning or ReasoningCapability.NONE,
-                use_temperature=temperature is not None
+                reasoning_capabilities=reasoning_mode,
+                supports_temperature=temperature is not None
             )
             
             # Add the dynamic model to the MODELS registry temporarily

@@ -125,7 +125,10 @@ class Agent(AgentProtocol):
             params['system_prompt'] = self._system_prompt
         
         logger.debug(f"Agent '{self._name}' generating response with model '{self._model}'")
-        
+
+        # 移除 model 参数
+        if 'model' in params:
+            del params['model']
         return await self._provider.generate(prompt, self._model, **params)
     
     async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
@@ -147,7 +150,11 @@ class Agent(AgentProtocol):
             params['system_prompt'] = self._system_prompt
         
         logger.debug(f"Agent '{self._name}' generating streaming response with model '{self._model}'")
-        
+
+        # 移除 model 参数
+        if 'model' in params:
+            del params['model']
+
         async for chunk in self._provider.generate_stream(prompt, self._model, **params):
             yield chunk
     

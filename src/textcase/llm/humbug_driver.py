@@ -101,7 +101,11 @@ class HumbugDriver(LLMProvider):
         # logger.debug(f"[{request_id}] Creating conversation settings")
         conversation_settings = TextcaseConversationSettings(
             model=model,
-            temperature=temperature
+            temperature=temperature,
+            max_tokens=kwargs.get('max_tokens', 200000),
+            context_window=kwargs.get('context_window', 200000),
+            max_output_tokens=kwargs.get('max_output_tokens', 8192),
+            reasoning=kwargs.get('reasoning', False),
         )
         
         # Create message history
