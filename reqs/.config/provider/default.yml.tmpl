@@ -7,5 +7,16 @@ api_base: "https://api.deepseek.com/v1"
 api_version: "v1"
 
 # Model configuration
+# Support both simple model list and model aliases
 model:
-  - "deepseek-v3"
+  - "deepseek-v3"  # Simple model name
+  # - name: "deepseek-v3"     # Model alias
+  #   api_name: "deepseek-chat" # Actual API model name
+
+# Alternative format for model aliases:
+# model:
+#   - name: "deepseek-v3"
+#     api_name: "deepseek-chat"
+#   - name: "gpt-4"
+#     api_name: "gpt-4-turbo"
+#   - "claude-3"  # Simple model without alias

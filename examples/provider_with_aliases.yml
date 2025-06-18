@@ -1,0 +1,29 @@
+# Example provider configuration with model aliases
+type: "openai"
+
+# API configuration
+api_key: "your-api-key-here"
+api_base: "https://api.deepseek.com/v1"
+api_version: "v1"
+
+# Model configuration with aliases
+model:
+  # Simple model names (no alias)
+  - "gpt-4"
+  - "gpt-3.5-turbo"
+  
+  # Model aliases - user-friendly names that map to actual API model names
+  - name: "deepseek-v3"        # User-friendly alias
+    api_name: "deepseek-chat"   # Actual API model name
+    
+  - name: "claude-3-sonnet"    # User-friendly alias
+    api_name: "claude-3-sonnet-20240229"  # Actual API model name
+    
+  - name: "gpt-4-latest"      # User-friendly alias
+    api_name: "gpt-4-turbo-preview"  # Actual API model name
+
+# Benefits of using aliases:
+# 1. Users can use simple, memorable names like "deepseek-v3"
+# 2. The system automatically maps to the correct API model name "deepseek-chat"
+# 3. Easy to update API model names without changing user commands
+# 4. Backward compatibility when providers change model names

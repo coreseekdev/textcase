@@ -205,12 +205,24 @@ def _get_available_models(textcase, provider_filter=None, include_unavailable=Fa
                     })
         elif 'model' in config:
             if isinstance(config['model'], list):
-                for model_name in config['model']:
-                    model_list.append({
-                        'name': model_name,
-                        'provider': provider_name,
-                        'provider_status': provider_status
-                    })
+                for model_item in config['model']:
+                    if isinstance(model_item, str):
+                        # Simple model name
+                        model_list.append({
+                            'name': model_item,
+                            'provider': provider_name,
+                            'provider_status': provider_status
+                        })
+                    elif isinstance(model_item, dict) and 'name' in model_item:
+                        # Model with alias
+                        model_info = {
+                            'name': model_item['name'],
+                            'provider': provider_name,
+                            'provider_status': provider_status
+                        }
+                        if 'api_name' in model_item:
+                            model_info['description'] = f"API name: {model_item['api_name']}"
+                        model_list.append(model_info)
             else:
                 model_list.append({
                     'name': config['model'],

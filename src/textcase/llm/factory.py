@@ -135,6 +135,39 @@ class LLMFactory:
         
         return sorted(list(models))
     
+    def get_model_info(self, model: str) -> Dict[str, Any]:
+        """Get detailed information about a model including alias mapping.
+        
+        Args:
+            model: Model name or alias
+            
+        Returns:
+            Dictionary containing model information
+        """
+        providers = self.find_provider_for_model(model)
+        if not providers:
+            return {"model": model, "found": False}
+        
+        # Get info from the first provider that supports this model
+        provider = self._providers[providers[0]]
+        if hasattr(provider, 'get_api_model_name'):
+            api_name = provider.get_api_model_name(model)
+            return {
+                "model": model,
+                "api_name": api_name,
+                "is_alias": api_name != model,
+                "providers": providers,
+                "found": True
+            }
+        
+        return {
+            "model": model,
+            "api_name": model,
+            "is_alias": False,
+            "providers": providers,
+            "found": True
+        }
+    
     def __repr__(self) -> str:
         """String representation of the factory.
         

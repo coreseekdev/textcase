@@ -61,7 +61,42 @@ class HumbugDriver(LLMProvider):
         Returns:
             List of model names supported by this provider
         """
-        return self._provider_config.get('model', [])
+        models = self._provider_config.get('model', [])
+        supported = []
+        
+        for model in models:
+            if isinstance(model, str):
+                # Simple model name
+                supported.append(model)
+            elif isinstance(model, dict) and 'name' in model:
+                # Model with alias
+                supported.append(model['name'])
+        
+        return supported
+
+    def get_api_model_name(self, model: str) -> str:
+        """Get the actual API model name for a given model alias.
+        
+        Args:
+            model: The model name or alias
+            
+        Returns:
+            The actual API model name to use in requests
+        """
+        models = self._provider_config.get('model', [])
+        
+        for model_config in models:
+            if isinstance(model_config, str):
+                # Simple model name - use as is
+                if model_config == model:
+                    return model
+            elif isinstance(model_config, dict) and 'name' in model_config:
+                # Model with alias
+                if model_config['name'] == model:
+                    return model_config.get('api_name', model)
+        
+        # If not found, return the original model name
+        return model
 
     async def generate(self, prompt: str, model: str, **kwargs) -> LLMResponse:
         """
@@ -97,10 +132,13 @@ class HumbugDriver(LLMProvider):
         # print(f"[DEBUG] Model: {model}")
         # print(f"[DEBUG] Temperature: {temperature}")
         
+        # Get the actual API model name
+        api_model = self.get_api_model_name(model)
+        
         # Create conversation settings
         # logger.debug(f"[{request_id}] Creating conversation settings")
         conversation_settings = TextcaseConversationSettings(
-            model=model,
+            model=api_model,
             temperature=temperature,
             max_tokens=kwargs.get('max_tokens', 200000),
             context_window=kwargs.get('context_window', 200000),
@@ -247,9 +285,12 @@ class HumbugDriver(LLMProvider):
             # logger.debug(f"[{request_id}] Max tokens: {max_tokens}")
             pass
 
+        # Get the actual API model name
+        api_model = self.get_api_model_name(model)
+        
         # Create conversation settings
         conversation_settings = TextcaseConversationSettings(
-            model=model,
+            model=api_model,
             temperature=temperature
         )
         
