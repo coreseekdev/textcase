@@ -289,27 +289,3 @@ class RepoVFS(ServiceVFSProtocol):
         """
         return self._local_vfs.close_session(session_id)
     
-    def exists(self, path: PurePosixPath) -> bool:
-        """Check if a path exists.
-        
-        Args:
-            path: Path to check
-            
-        Returns:
-            True if path exists, False otherwise
-        """
-        vfs, remaining_path = self.resolve_path(path)
-        return vfs.exists(remaining_path)
-    
-    def is_file(self, path: PurePosixPath) -> bool:
-        """Check if a path is a file.
-        
-        Args:
-            path: Path to check
-            
-        Returns:
-            True if path is a file, False otherwise
-        """
-        vfs, remaining_path = self.resolve_path(path)
-        return vfs.is_file(remaining_path)
-    

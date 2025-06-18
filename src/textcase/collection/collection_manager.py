@@ -11,7 +11,7 @@ from typing import Dict, Generic, Iterator, List, Optional, Tuple, Set, TypeVar,
 
 import yaml
 
-from ..client.vfs_client import VFSClient, VFSClientException
+from ..client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection, ResourceCollectionManager, ResourceItem
 from .collection import ResourceCollectionImpl
 from .config_collection_manager import ConfigCollectionManagerImpl

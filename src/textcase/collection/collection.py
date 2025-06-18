@@ -7,7 +7,7 @@ managing items within a single collection directory.
 from pathlib import PurePosixPath
 from typing import Dict, Generic, Iterator, List, Optional, Set, TypeVar, Union
 
-from ..client.vfs_client import VFSClient, VFSClientException
+from ..client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection, ResourceItem
 from .config import CollectionConfig
 from .item import ResourceItemImpl

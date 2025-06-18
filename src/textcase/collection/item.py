@@ -7,7 +7,7 @@ following the design patterns from the original module_item.py.
 from pathlib import PurePosixPath
 from typing import Any, Dict, Generic, Optional, Set, TypeVar, Union
 
-from ..client.vfs_client import VFSClient, VFSClientException
+from ..client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceItem, ResourceCollection
 from .config import CollectionConfig
 from .collection_tag import TagManager

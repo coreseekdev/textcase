@@ -22,7 +22,7 @@ from pathlib import Path, PurePosixPath
 import json
 
 from textcase.core.vfs.repo_vfs import RepoVFS
-from textcase.client.vfs_client import VFSClient
+from textcase.client import VFSClient
 from textcase.proto.service_vfs_protocol import EntryType
 
 

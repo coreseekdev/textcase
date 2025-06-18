@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Union, Tuple
 
 import yaml
 
-from ..client.vfs_client import VFSClient, VFSClientException
+from ..client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import InvalidCollectionError, ConfigLoadError
 
 

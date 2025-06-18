@@ -6,7 +6,7 @@ This module provides examples of how to use the resource collection system.
 from pathlib import PurePosixPath
 from typing import Any, Dict
 
-from ..client.vfs_client import VFSClient
+from ..client import VFSClient
 from . import CollectionFactory, configure_default_factory
 from .collection import ResourceCollectionImpl
 

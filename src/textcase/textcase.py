@@ -15,7 +15,7 @@ from .core.config.config_service import ConfigService
 from .core.config.config_vfs import setup_vfs_config
 from .service.service_registry_impl import create_service_registry
 from .scm.git import find_git_repo_root
-from .client.vfs_client import VFSClient, VFSClientException
+from .client import VFSClient, VFSClientException
 from .collection.collection_manager import ResourceCollectionManagerImpl
 
 
@@ -221,7 +221,8 @@ class TextCase:
         """
         if self._vfs_client is None:
             endpoint = self.get_vfs_endpoint()
-            self._vfs_client = VFSClient(endpoint)
+            # Pass service_registry for direct backend support
+            self._vfs_client = VFSClient(endpoint, service_registry=self.service_registry)
         return self._vfs_client
     
     @property

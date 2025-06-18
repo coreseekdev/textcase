@@ -4,25 +4,32 @@ import atexit
 import uuid
 from pathlib import Path
 from typing import Dict, Optional, Any, Callable, Union
-import gevent
-from gevent import monkey
-import zerorpc
-from zerorpc import gevent_zmq
+
+# Optional imports for RPC functionality
+try:
+    import zerorpc
+    import gevent
+    from gevent import monkey
+    # 确保 monkey patch
+    monkey.patch_all()
+    HAS_RPC_DEPS = True
+except ImportError:
+    gevent = None
+    monkey = None
+    zerorpc = None
+    HAS_RPC_DEPS = False
 
 from .services import get_service_factory
 from ..core.config import ConfigService
 from ..proto.service_registry_protocol import ServiceRegistry
 
-# 确保 monkey patch
-monkey.patch_all()
-
 class ServiceInfo:
     """Container for service information."""
-    def __init__(self, server: zerorpc.Server, service_greenlet: gevent.Greenlet, endpoint: str):
+    def __init__(self, server, service_greenlet, endpoint: str):
         self.server = server
         self.greenlet = service_greenlet
         self.endpoint = endpoint
-        self.stop_event = gevent.event.Event()
+        self.stop_event = gevent.event.Event() if gevent else None
 
 class ServiceRegistryImpl(ServiceRegistry):
     """Singleton class to manage RPC services and their endpoints using gevent."""
@@ -36,8 +43,10 @@ class ServiceRegistryImpl(ServiceRegistry):
         return cls._instance
     
     def __init__(self, config: Optional[Union[Path, ConfigService]] = None):
-        if hasattr(self, '_initialized') and self._initialized:
-            return
+        if hasattr(self, '_initialized') and self._initialized:            return
+        
+        if not HAS_RPC_DEPS:
+            raise ImportError("ServiceRegistryImpl requires gevent and zerorpc. Install with: pip install textcase[rpc]")
             
         self._services: Dict[str, ServiceInfo] = {}
         # 初始化 config_service
@@ -154,13 +163,26 @@ class ServiceRegistryImpl(ServiceRegistry):
         return self._config_service
 
 # For backward compatibility, provide a factory function
-def create_service_registry(config: Optional[Union[Path, ConfigService]] = None) -> ServiceRegistry:
+def create_service_registry(config: Optional[Union[Path, ConfigService]] = None, backend_type: Optional[str] = None) -> ServiceRegistry:
     """Create a new ServiceRegistry instance.
     
     Args:
         config: Either a Path to config file or an existing ConfigService instance
+        backend_type: Optional backend type ('zerorpc', 'direct', or None for auto-detection)
     
     Returns:
         ServiceRegistry implementation instance
     """
-    return ServiceRegistryImpl(config)
+    # If backend_type is specified, use the new registry with specific backend
+    if backend_type is not None:
+        from .service_registry_new import create_service_registry as create_new_registry
+        return create_new_registry(config, backend_type)
+    
+    # Try to determine the best backend automatically
+    if HAS_RPC_DEPS:
+        # Use zerorpc backend (existing implementation)
+        return ServiceRegistryImpl(config)
+    else:
+        # Fall back to direct backend
+        from .service_registry_new import create_service_registry as create_new_registry
+        return create_new_registry(config, 'direct')

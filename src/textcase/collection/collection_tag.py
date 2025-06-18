@@ -7,7 +7,7 @@ encapsulating operations related to specific tag files.
 from pathlib import PurePosixPath
 from typing import Dict, List, Optional, Set, TypeVar
 
-from ..client.vfs_client import VFSClient, VFSClientException
+from ..client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection
 
 T = TypeVar('T')

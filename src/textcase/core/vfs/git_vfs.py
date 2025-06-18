@@ -845,33 +845,3 @@ class GitVFS(ServiceVFSProtocol):
     def close_session(self, session_id: ServiceVFSProtocol.SessionId) -> bool:
         """Close an edit session (not supported for git VFS)."""
         return False
-    
-    def exists(self, path: PurePosixPath) -> bool:
-        """Check if a path exists in the git repository.
-        
-        Args:
-            path: Path to check
-            
-        Returns:
-            True if path exists, False otherwise
-        """
-        try:
-            self.info(path)
-            return True
-        except (FileNotFoundError, KeyError):
-            return False
-    
-    def is_file(self, path: PurePosixPath) -> bool:
-        """Check if a path is a file in the git repository.
-        
-        Args:
-            path: Path to check
-            
-        Returns:
-            True if path is a file, False otherwise
-        """
-        try:
-            info = self.info(path)
-            return info is not None and info.get('type') == 'file'
-        except (FileNotFoundError, KeyError):
-            return False

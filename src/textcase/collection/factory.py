@@ -7,7 +7,7 @@ resource collections with simplified interfaces.
 from pathlib import Path, PurePosixPath
 from typing import Optional, TypeVar, Union
 
-from ..client.vfs_client import VFSClient
+from ..client import VFSClient
 from .collection_manager import ResourceCollectionManagerImpl
 from .collection import ResourceCollectionImpl
 from .item import ResourceItemImpl

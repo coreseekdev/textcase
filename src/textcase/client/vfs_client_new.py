@@ -9,7 +9,7 @@ from typing import Optional, Any, Dict, List, Tuple, Union
 from pathlib import PurePosixPath, Path
 
 from ..proto.service_vfs_protocol import EntryType
-from ..service.error_result import is_error_result, error_result_from_dict, ResultOrError
+from ..service.error_result import ErrorResult, is_error_result, ResultOrError
 
 # Try to import zerorpc, but make it optional
 try:
@@ -173,9 +173,14 @@ class VFSClientNew:
         return self._handle_rpc_exception(self.client.readonly)
     
     @property
-    def mount_point(self) -> str:
-        """Get the mount point."""
-        return self._handle_rpc_exception(self.client.mount_point)
+    def mount_point(self) -> PurePosixPath:
+        """Get the root path of the VFS service.
+        
+        Returns:
+            Root path as PurePosixPath
+        """
+        result = self._handle_rpc_exception(self.client.mount_point)
+        return PurePosixPath(result)
     
     def info(self, path: Union[str, PurePosixPath]) -> Dict[str, Any]:
         """Get information about a path.
@@ -189,129 +194,276 @@ class VFSClientNew:
         path_str = str(path)
         return self._handle_rpc_exception(self.client.info, path_str)
     
-    def list(self, path: Union[str, PurePosixPath] = '/') -> List[Dict[str, Any]]:
-        """List directory contents.
+    def list(self, path: Union[str, PurePosixPath] = '/', option: Optional[Dict[str, Any]] = None) -> List[Tuple[PurePosixPath, EntryType]]:
+        """List contents of a directory.
         
         Args:
-            path: Directory path to list
+            path: Directory path to list (string or PurePosixPath)
+            option: Optional listing options
             
         Returns:
-            List of dictionaries containing entry information
+            List of (PurePosixPath, EntryType) tuples
         """
+        if option is None:
+            option = {}
+        
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
         path_str = str(path)
-        result = self._handle_rpc_exception(self.client.list, path_str)
         
-        # Convert tuple format to dictionary format
-        if result and isinstance(result[0], (list, tuple)) and len(result[0]) == 2:
-            # Server returns List[Tuple[str, str]], convert to List[Dict[str, Any]]
-            return [
-                {
-                    'name': entry[0].split('/')[-1] if '/' in entry[0] else entry[0],
-                    'path': entry[0],
-                    'type': 'directory' if entry[1] == 'directory' else 'file'
-                }
-                for entry in result
-            ]
+        # Get string tuples from server and convert to proper types
+        result = self._handle_rpc_exception(self.client.list, path_str, option)
         
-        return result
+        # Convert string tuples to (PurePosixPath, EntryType) tuples
+        converted_result = []
+        for path_str, entry_type_str in result:
+            posix_path = PurePosixPath(path_str)
+            entry_type = EntryType(entry_type_str)
+            converted_result.append((posix_path, entry_type))
+        
+        return converted_result
     
     def get_text(self, path: Union[str, PurePosixPath], encoding: str = 'utf-8') -> str:
-        """Get text content of a file.
+        """Get file contents as text.
         
         Args:
-            path: File path
-            encoding: Text encoding
+            path: Path to the file (string or PurePosixPath)
+            encoding: Text encoding (default: utf-8)
             
         Returns:
-            File content as string
+            File contents as string
         """
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
         path_str = str(path)
-        return self._handle_rpc_exception(self.client.get_text, path_str, encoding)
+        
+        content = self._handle_rpc_exception(self.client.get, path_str)
+        return content.decode(encoding) if content else ''
     
-    def get_bytes(self, path: Union[str, PurePosixPath]) -> bytes:
-        """Get binary content of a file.
+    def get(self, path: Union[str, PurePosixPath]) -> bytes:
+        """Get file contents as bytes.
         
         Args:
-            path: File path
+            path: Path to the file (string or PurePosixPath)
             
         Returns:
-            File content as bytes
+            File contents as bytes
         """
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
         path_str = str(path)
-        return self._handle_rpc_exception(self.client.get_bytes, path_str)
+        
+        return self._handle_rpc_exception(self.client.get, path_str)
     
-    def exists(self, path: Union[str, PurePosixPath]) -> bool:
-        """Check if a path exists.
+
+    
+    def put(self, path: Union[str, PurePosixPath], content: bytes, create_if_missing: bool = False) -> bool:
+        """Put file contents.
         
         Args:
-            path: Path to check
+            path: Path to write to (string or PurePosixPath)
+            content: Content to write
+            create_if_missing: Create file if it doesn't exist
             
         Returns:
-            True if path exists, False otherwise
+            Success status
         """
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
         path_str = str(path)
-        return self._handle_rpc_exception(self.client.exists, path_str)
+        
+        return self._handle_rpc_exception(self.client.put, path_str, content, create_if_missing)
     
-    def is_file(self, path: Union[str, PurePosixPath]) -> bool:
-        """Check if a path is a file.
+    def remove(self, path: Union[str, PurePosixPath], force: bool = False) -> bool:
+        """Remove a file or directory.
         
         Args:
-            path: Path to check
+            path: Path to remove (string or PurePosixPath)
+            force: Force removal even if non-empty directory
             
         Returns:
-            True if path is a file, False otherwise
+            Success status
         """
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
         path_str = str(path)
-        return self._handle_rpc_exception(self.client.is_file, path_str)
-    
-    def is_dir(self, path: Union[str, PurePosixPath]) -> bool:
-        """Check if a path is a directory.
         
-        Args:
-            path: Path to check
-            
-        Returns:
-            True if path is a directory, False otherwise
-        """
-        path_str = str(path)
-        return self._handle_rpc_exception(self.client.is_dir, path_str)
+        return self._handle_rpc_exception(self.client.remove, path_str, force)
     
-    def write_text(self, path: Union[str, PurePosixPath], content: str, encoding: str = 'utf-8') -> None:
-        """Write text content to a file.
-        
-        Args:
-            path: File path
-            content: Text content to write
-            encoding: Text encoding
-        """
-        path_str = str(path)
-        return self._handle_rpc_exception(self.client.write_text, path_str, content, encoding)
-    
-    def write_bytes(self, path: Union[str, PurePosixPath], content: bytes) -> None:
-        """Write binary content to a file.
-        
-        Args:
-            path: File path
-            content: Binary content to write
-        """
-        path_str = str(path)
-        return self._handle_rpc_exception(self.client.write_bytes, path_str, content)
-    
-    def delete(self, path: Union[str, PurePosixPath]) -> None:
-        """Delete a file or directory.
-        
-        Args:
-            path: Path to delete
-        """
-        path_str = str(path)
-        return self._handle_rpc_exception(self.client.delete, path_str)
-    
-    def mkdir(self, path: Union[str, PurePosixPath], parents: bool = False) -> None:
+    def mkdir(self, path: Union[str, PurePosixPath], parents: bool = False, exist_ok: bool = False) -> bool:
         """Create a directory.
         
         Args:
-            path: Directory path to create
+            path: Directory path to create (string or PurePosixPath)
             parents: Create parent directories if they don't exist
+            exist_ok: Don't raise error if directory already exists
+            
+        Returns:
+            Success status
         """
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
         path_str = str(path)
-        return self._handle_rpc_exception(self.client.mkdir, path_str, parents)
+        
+        return self._handle_rpc_exception(self.client.mkdir, path_str, parents, exist_ok)
+    
+    def to_vfs_path(self, local_path: Path) -> Optional[PurePosixPath]:
+        """Convert a local file system path to a VFS path if possible.
+        
+        This method attempts to convert a path from the local file system
+        to its equivalent path in the VFS. It handles mounted VFS instances
+        by checking if the local path belongs to any mounted VFS and delegating
+        the conversion if necessary.
+        
+        Args:
+            local_path: Local file system path to convert
+            
+        Returns:
+            Equivalent VFS path as PurePosixPath if conversion is possible,
+            None if the path cannot be mapped to this VFS
+        """
+        path_str = local_path.as_posix()
+        try:
+            result = self._handle_rpc_exception(self.client.to_vfs_path, path_str)
+            if result is not None:
+                return PurePosixPath(result)
+            return None
+        except Exception as e:
+            raise VFSClientException(
+                type(e).__name__,
+                str(e),
+                None
+            )
+
+
+# For backward compatibility
+def get_vfs_client(endpoint: str = "inproc://vfs", service_registry: Optional[Any] = None) -> VFSClientNew:
+    """Get a VFS client instance.
+    
+    Args:
+        endpoint: Service endpoint to connect to
+        service_registry: Optional service registry for direct backend
+        
+    Returns:
+        VFS client instance
+        
+    Raises:
+        VFSClientException: If connection fails
+    """
+    try:
+        return VFSClientNew(endpoint, service_registry)
+    except Exception as e:
+        if isinstance(e, VFSClientException):
+            raise
+        else:
+            raise VFSClientException(
+                type(e).__name__,
+                str(e),
+                None
+            )
+    
+    def patch(self, path: Union[str, PurePosixPath], range_tuple: Tuple[int, int], content: bytes, create_if_missing: bool = False) -> bool:
+        """Patch a file with new content in a specific range.
+        
+        Args:
+            path: Path to the file to patch (string or PurePosixPath)
+            range_tuple: (start, end) byte range to replace
+            content: New content to insert
+            create_if_missing: Create file if it doesn't exist
+            
+        Returns:
+            Success status
+        """
+        # 确保路径是POSIX风格
+        if isinstance(path, str):
+            # 将Windows风格路径转换为POSIX风格
+            path = Path(path).as_posix()
+        path_str = str(path)
+        
+        return self._handle_rpc_exception(self.client.patch, path_str, range_tuple, content, create_if_missing)
+    
+    def commit(self, message: str, op_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Commit patches.
+        
+        Args:
+            message: Commit message
+            op_id: Optional operation ID
+            session_id: Optional session ID
+            
+        Returns:
+            Commit status and message
+        """
+        return self._handle_rpc_exception(self.client.commit, message, op_id, session_id)
+    
+    def abort(self, op_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Abort patches.
+        
+        Args:
+            op_id: Optional operation ID
+            session_id: Optional session ID
+            
+        Returns:
+            Abort status and message
+        """
+        return self._handle_rpc_exception(self.client.abort, op_id, session_id)
+    
+    def create_session(self) -> str:
+        """Create a new edit session.
+        
+        Returns:
+            Session ID
+        """
+        return self._handle_rpc_exception(self.client.create_session)
+    
+    def list_sessions(self) -> List[str]:
+        """List all active sessions.
+        
+        Returns:
+            List of active session IDs
+        """
+        return self._handle_rpc_exception(self.client.list_sessions)
+    
+    def to_local_path(self, vfs_path: Union[str, PurePosixPath]) -> Optional[Path]:
+        """Convert a VFS path to a local file system path if possible.
+        
+        This method attempts to convert a path from the VFS to its equivalent
+        path in the local file system. It handles mounted VFS instances by
+        checking if the VFS path belongs to any mounted VFS and delegating the
+        conversion if necessary.
+        
+        Args:
+            vfs_path: VFS path to convert (string or PurePosixPath)
+            
+        Returns:
+            Equivalent local file system path as Path if conversion is possible,
+            None if the path cannot be mapped to this VFS
+        """
+        # 确保路径是POSIX风格
+        if isinstance(vfs_path, str):
+            # 将Windows风格路径转换为POSIX风格
+            vfs_path = Path(vfs_path).as_posix()
+        path_str = str(vfs_path)
+        
+        try:
+            result = self._handle_rpc_exception(self.client.to_local_path, path_str)
+            if result is not None:
+                return Path(result)
+            return None
+        except Exception as e:
+            raise VFSClientException(
+                type(e).__name__,
+                str(e),
+                None
+            )

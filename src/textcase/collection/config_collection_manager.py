@@ -21,7 +21,7 @@ import yaml
 import shutil
 import os
 
-from ..client.vfs_client import VFSClient, VFSClientException
+from ..client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection, ResourceItem, ResourceCollectionManager
 from .config_collection import ConfigCollectionImpl, ConfigTemplateCollectionImpl
 

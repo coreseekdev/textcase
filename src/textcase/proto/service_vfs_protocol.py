@@ -145,29 +145,7 @@ class ServiceVFSProtocol(ABC):
         """
         ...
     
-    @abstractmethod
-    def exists(self, path: PurePosixPath) -> bool:
-        """Check if a path exists.
-        
-        Args:
-            path: Path to check
-            
-        Returns:
-            True if path exists, False otherwise
-        """
-        ...
-    
-    @abstractmethod
-    def is_file(self, path: PurePosixPath) -> bool:
-        """Check if a path is a file.
-        
-        Args:
-            path: Path to check
-            
-        Returns:
-            True if path is a file, False otherwise
-        """
-        ...
+
     
     @abstractmethod
     def list(self, path: PurePosixPath, option: Dict[str, Any]) -> List[Tuple[PurePosixPath, EntryType]]:

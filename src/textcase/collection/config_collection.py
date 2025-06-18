@@ -24,7 +24,7 @@ import jinja2.meta
 from pathlib import Path, PurePosixPath
 from typing import Dict, Any, Optional, List, TypeVar, Generic, Union, Iterator, Set
 
-from ..client.vfs_client import VFSClient, VFSClientException
+from ..client import VFSClient, VFSClientException
 from ..proto.resource_collection_protocol import ResourceCollection, ResourceItem
 from .collection import ResourceCollectionImpl
 from ..proto.service_vfs_protocol import EntryType
