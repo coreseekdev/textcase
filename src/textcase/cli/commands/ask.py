@@ -104,8 +104,8 @@ async def _generate_response(
         click.echo("")  # Final newline
     else:
         # Non-streaming response
-        click.echo(f"Generating response from {agent.model}...", err=True)
-        click.echo("", err=True)  # Empty line
+        # click.echo(f"Generating response from {agent.model}...", err=True)
+        # click.echo("", err=True)  # Empty line
 
         response = await agent.generate(prompt, **kwargs)
         click.echo(response.content)
@@ -113,8 +113,6 @@ async def _generate_response(
         # Show metadata if available
         if response.metadata:
             click.echo("", err=True)
-            click.echo(f"Model: {response.model}", err=True)
-            click.echo(f"Provider: {response.provider}", err=True)
 
             # Show token usage if available
             if 'usage' in response.metadata:

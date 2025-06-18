@@ -93,9 +93,9 @@ class HumbugDriver(LLMProvider):
             logger.debug(f"[{request_id}] Top P: {top_p}")
         """ 
         # For console output (will be removed once logging is fully integrated)
-        print(f"[DEBUG] Using provider: {self.provider_name}")
-        print(f"[DEBUG] Model: {model}")
-        print(f"[DEBUG] Temperature: {temperature}")
+        # print(f"[DEBUG] Using provider: {self.provider_name}")
+        # print(f"[DEBUG] Model: {model}")
+        # print(f"[DEBUG] Temperature: {temperature}")
         
         # Create conversation settings
         # logger.debug(f"[{request_id}] Creating conversation settings")
@@ -119,8 +119,8 @@ class HumbugDriver(LLMProvider):
         # logger.debug(f"[{request_id}] Prompt length: {len(prompt)} chars")
         
         # Print request info for console
-        print(f"[DEBUG] Sending request to model: {model}")
-        print(f"[DEBUG] Messages: {messages}")
+        # print(f"[DEBUG] Sending request to model: {model}")
+        # print(f"[DEBUG] Messages: {messages}")
         
         # Collect the full response
         full_response = ""
@@ -200,7 +200,7 @@ class HumbugDriver(LLMProvider):
             end_time = asyncio.get_event_loop().time()
             duration = end_time - start_time
             # logger.debug(f"[{request_id}] Generator closed during LLM request after {duration:.2f}s")
-            return LLMResponse("", LLMUsage(0, 0, 0))
+            return LLMResponse("", "", self.provider_name, {"usage": LLMUsage(0, 0, 0)})
         except Exception as e:
             end_time = asyncio.get_event_loop().time()
             duration = end_time - start_time
@@ -219,7 +219,7 @@ class HumbugDriver(LLMProvider):
             # logger.warning(f"[{request_id}] Received empty response from LLM")
             pass
             
-        return LLMResponse(full_response, usage)
+        return LLMResponse(full_response, model, self.provider_name, {"usage": usage})
     
     async def generate_stream(self, prompt: str, model: str, **kwargs) -> AsyncGenerator[str, None]:
         """
@@ -419,7 +419,7 @@ class HumbugDriver(LLMProvider):
                 api_url = api_base
                 
             # logger.info(f"Using API URL: {api_url}")
-            print(f"[DEBUG] Using API URL: {api_url}")  # Keep console output for now
+            # print(f"[DEBUG] Using API URL: {api_url}")  # Keep console output for now
                 
             # Check if API key is provided
             api_key = config.get('api_key', '')
